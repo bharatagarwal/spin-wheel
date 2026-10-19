@@ -1,0 +1,18 @@
+only_rules:
+  - cyclomatic_complexity
+  - function_body_length
+  - closure_body_length
+  - type_body_length
+  - file_length
+  - function_parameter_count
+  - nesting
+  - large_tuple
+included:
+  - main.swift
+  - Session.swift
+  - Turns.swift
+  - Sound.swift
+  - Physics.swift
+  - Tests
+cyclomatic_complexity:
+  ignores_case_statements: true

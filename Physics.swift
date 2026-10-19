@@ -2,6 +2,12 @@ import Foundation
 
 typealias YDownPoint = (x: Double, y: Double)
 
+struct FlapperPoints {
+    let pivot: YDownPoint
+    let joint: YDownPoint
+    let tip: YDownPoint
+}
+
 enum WheelRadii {
     static let pegCircle = 0.93
     static let pegRadius = 0.016
@@ -12,10 +18,11 @@ enum WheelRadii {
     static let flapperReach = armLength + armRadius + pegRadius
     static let pegAngleReachableFromPointer = asin(min(1, flapperReach / pegCircle))
 
-    static func flapper(rootFromVertical: Double, tipFromVertical: Double) -> (pivot: YDownPoint, joint: YDownPoint, tip: YDownPoint) {
+    static func flapper(rootFromVertical: Double, tipFromVertical: Double) -> FlapperPoints {
         let pivot = (x: 0.0, y: -WheelRadii.pivot)
         let joint = (x: pivot.x - sin(rootFromVertical) * segmentLength, y: pivot.y + cos(rootFromVertical) * segmentLength)
-        return (pivot, joint, (x: joint.x - sin(tipFromVertical) * segmentLength, y: joint.y + cos(tipFromVertical) * segmentLength))
+        return FlapperPoints(pivot: pivot, joint: joint,
+                             tip: (x: joint.x - sin(tipFromVertical) * segmentLength, y: joint.y + cos(tipFromVertical) * segmentLength))
     }
 
     static func sliceAngle(_ i: Int, of slices: Int) -> Double { Double(i) * 2 * .pi / Double(slices) }
@@ -124,7 +131,7 @@ struct WheelSim {
         return min(Int(a / segment), slices - 1)
     }
 
-    private var points: (pivot: YDownPoint, joint: YDownPoint, tip: YDownPoint) {
+    private var points: FlapperPoints {
         WheelRadii.flapper(rootFromVertical: rootFromVertical, tipFromVertical: tipFromVertical)
     }
 
@@ -150,53 +157,78 @@ struct WheelSim {
         return first..<max(first, last + 1)
     }
 
-    private mutating func pegContacts() -> (forceRoot: Double, forceTip: Double, torque: Double, impact: Double?) {
-        let p = params
-        let a = WheelRadii.segmentLength, b = a
-        var forceRoot = 0.0, forceTip = 0.0
-        let (pivot, joint, _) = points
-        let rootDir = (x: -sin(rootFromVertical), y: cos(rootFromVertical)), tipDir = (x: -sin(tipFromVertical), y: cos(tipFromVertical))
-        var contactTorque = 0.0
+    private struct SegmentContact {
+        let depth: Double
+        let point: YDownPoint
+        let rootJacobian: YDownPoint
+        let tipJacobian: YDownPoint
+    }
+
+    private struct ContactForces {
+        var forceRoot = 0.0
+        var forceTip = 0.0
+        var torque = 0.0
         var impact: Double?
+    }
+
+    private mutating func pegContacts() -> ContactForces {
+        var forces = ContactForces()
         var inContact = false
-
         for i in pegsReachableFromPointer {
-            let (cx, cy) = WheelRadii.peg(i, of: slices, wheelAngle: clockwiseAngle)
-
-            var best: (depth: Double, q: YDownPoint, rootJacobian: YDownPoint, tipJacobian: YDownPoint)?
-            for outer in [false, true] {
-                let start = outer ? joint : pivot
-                let dir = outer ? tipDir : rootDir
-                let len = outer ? b : a
-                let s = min(max((cx - start.x) * dir.x + (cy - start.y) * dir.y, 0), len)
-                let q = (x: start.x + s * dir.x, y: start.y + s * dir.y)
-                let depth = WheelRadii.pegRadius + WheelRadii.armRadius - ((cx - q.x) * (cx - q.x) + (cy - q.y) * (cy - q.y)).squareRoot()
-                let rootJacobian = outer ? (x: -a * cos(rootFromVertical), y: -a * sin(rootFromVertical)) : (x: -s * cos(rootFromVertical), y: -s * sin(rootFromVertical))
-                let tipJacobian = outer ? (x: -s * cos(tipFromVertical), y: -s * sin(tipFromVertical)) : (x: 0.0, y: 0.0)
-                if depth > 0, depth > best?.depth ?? 0 { best = (depth, q, rootJacobian, tipJacobian) }
-            }
-            guard let c = best else { continue }
+            let peg = WheelRadii.peg(i, of: slices, wheelAngle: clockwiseAngle)
+            guard let contact = deepestContact(with: peg) else { continue }
             inContact = true
-
-            let sx = cx - c.q.x, sy = cy - c.q.y
-            let dist = max((sx * sx + sy * sy).squareRoot(), 1e-9)
-            let nx = sx / dist, ny = sy / dist
-            let tx = -ny, ty = nx
-            let vx = -clockwiseSpeed * cy - (c.rootJacobian.x * rootRate + c.tipJacobian.x * tipRate)
-            let vy = clockwiseSpeed * cx - (c.rootJacobian.y * rootRate + c.tipJacobian.y * tipRate)
-            let vn = vx * nx + vy * ny
-            let vt = vx * tx + vy * ty
-            if !touching, vn < 0 { impact = -vn }
-
-            let normal = max(0, p.contactStiffness * pow(c.depth, 1.5) * (1 - 1.5 * p.contactDamping * vn))
-            let friction = -p.contactFriction * normal * tanh(vt / 0.02)
-            let fx = normal * nx + friction * tx, fy = normal * ny + friction * ty
-            contactTorque += cx * fy - cy * fx
-            forceRoot -= c.rootJacobian.x * fx + c.rootJacobian.y * fy
-            forceTip -= c.tipJacobian.x * fx + c.tipJacobian.y * fy
+            addForce(of: contact, from: peg, into: &forces)
         }
         touching = inContact
-        return (forceRoot, forceTip, contactTorque, impact)
+        return forces
+    }
+
+    private func deepestContact(with peg: YDownPoint) -> SegmentContact? {
+        let a = WheelRadii.segmentLength, b = a
+        let flapper = points
+        let rootDir = (x: -sin(rootFromVertical), y: cos(rootFromVertical)), tipDir = (x: -sin(tipFromVertical), y: cos(tipFromVertical))
+        let inner = contact(with: peg, alongSegmentFrom: flapper.pivot, direction: rootDir, length: a) { s in
+            ((x: -s * cos(rootFromVertical), y: -s * sin(rootFromVertical)), (x: 0.0, y: 0.0))
+        }
+        let outer = contact(with: peg, alongSegmentFrom: flapper.joint, direction: tipDir, length: b) { s in
+            ((x: -a * cos(rootFromVertical), y: -a * sin(rootFromVertical)), (x: -s * cos(tipFromVertical), y: -s * sin(tipFromVertical)))
+        }
+        var best: SegmentContact?
+        for candidate in [inner, outer] where candidate.depth > 0 && candidate.depth > best?.depth ?? 0 {
+            best = candidate
+        }
+        return best
+    }
+
+    private func contact(with peg: YDownPoint, alongSegmentFrom start: YDownPoint, direction dir: YDownPoint, length: Double,
+                         jacobians: (Double) -> (root: YDownPoint, tip: YDownPoint)) -> SegmentContact {
+        let s = min(max((peg.x - start.x) * dir.x + (peg.y - start.y) * dir.y, 0), length)
+        let q = (x: start.x + s * dir.x, y: start.y + s * dir.y)
+        let depth = WheelRadii.pegRadius + WheelRadii.armRadius - ((peg.x - q.x) * (peg.x - q.x) + (peg.y - q.y) * (peg.y - q.y)).squareRoot()
+        let j = jacobians(s)
+        return SegmentContact(depth: depth, point: q, rootJacobian: j.root, tipJacobian: j.tip)
+    }
+
+    private func addForce(of c: SegmentContact, from peg: YDownPoint, into forces: inout ContactForces) {
+        let p = params
+        let (cx, cy) = peg
+        let sx = cx - c.point.x, sy = cy - c.point.y
+        let dist = max((sx * sx + sy * sy).squareRoot(), 1e-9)
+        let nx = sx / dist, ny = sy / dist
+        let tx = -ny, ty = nx
+        let vx = -clockwiseSpeed * cy - (c.rootJacobian.x * rootRate + c.tipJacobian.x * tipRate)
+        let vy = clockwiseSpeed * cx - (c.rootJacobian.y * rootRate + c.tipJacobian.y * tipRate)
+        let vn = vx * nx + vy * ny
+        let vt = vx * tx + vy * ty
+        if !touching, vn < 0 { forces.impact = -vn }
+
+        let normal = max(0, p.contactStiffness * pow(c.depth, 1.5) * (1 - 1.5 * p.contactDamping * vn))
+        let friction = -p.contactFriction * normal * tanh(vt / 0.02)
+        let fx = normal * nx + friction * tx, fy = normal * ny + friction * ty
+        forces.torque += cx * fy - cy * fx
+        forces.forceRoot -= c.rootJacobian.x * fx + c.rootJacobian.y * fy
+        forces.forceTip -= c.tipJacobian.x * fx + c.tipJacobian.y * fy
     }
 
     private mutating func stepFlapper(forceRoot: Double, forceTip: Double, segmentMass: Double) {
@@ -223,21 +255,33 @@ struct WheelSim {
             break
         case .stuck where abs(contactTorque) <= p.staticFriction:
             break
-        case .stuck, .turning:
-            let stillFor = if case .stuck(let s) = phase { s } else { 0.0 }
-            let sliding = clockwiseSpeed != 0 ? (clockwiseSpeed > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
-            let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
-            let next = clockwiseSpeed + torque / p.wheelInertia * h
-            if next * sliding <= 0 {
-                clockwiseSpeed = 0
-                phase = abs(contactTorque) <= p.staticFriction ? .stuck(stillFor: stillFor) : .turning
-            } else {
-                clockwiseSpeed = next
-                phase = .turning
-            }
+        case .stuck(let stillFor):
+            slide(contactTorque: contactTorque, stillFor: stillFor)
+        case .turning:
+            slide(contactTorque: contactTorque, stillFor: 0)
         }
         clockwiseAngle += clockwiseSpeed * h
         time += h
+    }
+
+    private mutating func slide(contactTorque: Double, stillFor: Double) {
+        let p = params
+        let sliding = slidingDirection(contactTorque: contactTorque)
+        let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
+        let next = clockwiseSpeed + torque / p.wheelInertia * Self.step
+        guard next * sliding > 0 else {
+            clockwiseSpeed = 0
+            phase = abs(contactTorque) <= p.staticFriction ? .stuck(stillFor: stillFor) : .turning
+            return
+        }
+        clockwiseSpeed = next
+        phase = .turning
+    }
+
+    private func slidingDirection(contactTorque: Double) -> Double {
+        if clockwiseSpeed > 0 { return 1 }
+        if clockwiseSpeed < 0 { return -1 }
+        return contactTorque > 0 ? 1 : -1
     }
 
     private mutating func settle() {

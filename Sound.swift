@@ -1,6 +1,12 @@
 import AVFoundation
 
 final class Sound {
+    private struct Mode {
+        let freq: Double
+        let decay: Double
+        let gain: Double
+    }
+
     private let engine = AVAudioEngine()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
     private var players: [AVAudioPlayerNode] = []
@@ -58,12 +64,12 @@ final class Sound {
 
     private func makeTick() -> AVAudioPCMBuffer {
         let jitter = { Double.random(in: 0.93...1.07) }
-        let modes: [(freq: Double, decay: Double, gain: Double)] = [
-            (170 * jitter(), 0.022, 1.0),
-            (760 * jitter(), 0.010, 0.55),
-            (1290 * jitter(), 0.007, 0.4),
-            (2150 * jitter(), 0.005, 0.25),
-            (3400 * jitter(), 0.003, 0.12),
+        let modes = [
+            Mode(freq: 170 * jitter(), decay: 0.022, gain: 1.0),
+            Mode(freq: 760 * jitter(), decay: 0.010, gain: 0.55),
+            Mode(freq: 1290 * jitter(), decay: 0.007, gain: 0.4),
+            Mode(freq: 2150 * jitter(), decay: 0.005, gain: 0.25),
+            Mode(freq: 3400 * jitter(), decay: 0.003, gain: 0.12),
         ]
         let fs = format.sampleRate
         var state = modes.map { _ in (0.0, 0.0) }

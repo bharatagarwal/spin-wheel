@@ -24,86 +24,9 @@ struct ContentView: View {
         ZStack {
             Color.black.opacity(0.35 + 0.4 * m.focus)
                 .ignoresSafeArea()
-
             HStack(spacing: 20) {
-                VStack(spacing: 28) {
-                    WheelAssembly(names: m.turns.wheel, pose: m.pose,
-                                  onDrag: m.drag(to:at:), onRelease: m.release)
-                        .accessibilityElement()
-                        .accessibilityIdentifier("wheel")
-                        .accessibilityValue(m.spinning ? "spinning" : "idle")
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { m.spin() }
-                        .overlay {
-                            Text(m.winner ?? " ")
-                                .font(.system(size: 40, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 32).padding(.vertical, 14)
-                                .glassEffect(.regular, in: .capsule)
-                                .opacity(m.winner == nil ? 0 : 1)
-                                .scaleEffect(m.winner == nil ? 0.3 : 1)
-                                .accessibilityIdentifier("winner")
-                        }
-                        .scaleEffect(1 + 0.06 * m.focus)
-                        .zIndex(1)
-                        .onTapGesture { m.spin() }
-
-                    GlassEffectContainer {
-                        HStack(spacing: 12) {
-                            Button("Spin") { m.spin() }
-                                .keyboardShortcut(.space, modifiers: [])
-                                .disabled(m.spinning || m.turns.waiting.isEmpty)
-                                .buttonStyle(.glassProminent)
-                                .accessibilityIdentifier("spin")
-                            Button("Reset") { m.reset() }
-                                .disabled(m.spinning)
-                                .buttonStyle(.glass)
-                                .accessibilityIdentifier("reset")
-                        }
-                        .controlSize(.extraLarge)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Team").font(.title3.bold())
-                    ScrollView {
-                        VStack(spacing: 6) {
-                            ForEach(m.team.names, id: \.self) { name in
-                                HStack {
-                                    Text(name)
-                                        .strikethrough(m.turns.done.contains(name))
-                                        .opacity(m.turns.done.contains(name) ? 0.5 : 1)
-                                        .accessibilityIdentifier("member-\(name)")
-                                        .accessibilityValue(m.turns.done.contains(name) ? "done" : "waiting")
-                                    Spacer()
-                                    Button { m.remove(name) } label: { Image(systemName: "xmark") }
-                                        .buttonStyle(.borderless)
-                                        .disabled(m.spinning)
-                                        .accessibilityIdentifier("remove-\(name)")
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .glassEffect(.regular, in: .rect(cornerRadius: 12))
-                            }
-                        }
-                    }
-                    HStack {
-                        TextField("Add name", text: $m.newName)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .glassEffect(.regular, in: .capsule)
-                            .focused($typingName)
-                            .accessibilityIdentifier("name-field")
-                            .onSubmit(m.add)
-                        Button { m.add() } label: { Image(systemName: "plus") }
-                            .buttonStyle(.glass)
-                            .accessibilityIdentifier("add")
-                    }
-                }
-                .padding(16)
-                .frame(width: 250)
-                .glassEffect(.regular, in: .rect(cornerRadius: 24))
-                .opacity(1 - 0.6 * m.focus)
+                WheelColumn(m: m)
+                TeamPanel(m: m, typingName: $typingName)
             }
             .padding(24)
         }
@@ -112,6 +35,113 @@ struct ContentView: View {
             // macOS focuses the text field at launch, which would swallow Space.
             DispatchQueue.main.async { typingName = false }
         }
+    }
+}
+
+struct WheelColumn: View {
+    @ObservedObject var m: Model
+
+    var body: some View {
+        VStack(spacing: 28) {
+            WheelAssembly(names: m.turns.wheel, pose: m.pose, onDrag: m.drag(to:at:), onRelease: m.release)
+                .accessibilityElement()
+                .accessibilityIdentifier("wheel")
+                .accessibilityValue(m.spinning ? "spinning" : "idle")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { m.spin() }
+                .overlay { WinnerBanner(winner: m.winner) }
+                .scaleEffect(1 + 0.06 * m.focus)
+                .zIndex(1)
+                .onTapGesture { m.spin() }
+            GlassEffectContainer {
+                HStack(spacing: 12) {
+                    Button("Spin") { m.spin() }
+                        .keyboardShortcut(.space, modifiers: [])
+                        .disabled(m.spinning || m.turns.waiting.isEmpty)
+                        .buttonStyle(.glassProminent)
+                        .accessibilityIdentifier("spin")
+                    Button("Reset") { m.reset() }
+                        .disabled(m.spinning)
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("reset")
+                }
+                .controlSize(.extraLarge)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+struct WinnerBanner: View {
+    let winner: String?
+
+    var body: some View {
+        Text(winner ?? " ")
+            .font(.system(size: 40, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 32).padding(.vertical, 14)
+            .glassEffect(.regular, in: .capsule)
+            .opacity(winner == nil ? 0 : 1)
+            .scaleEffect(winner == nil ? 0.3 : 1)
+            .accessibilityIdentifier("winner")
+    }
+}
+
+struct TeamPanel: View {
+    @ObservedObject var m: Model
+    var typingName: FocusState<Bool>.Binding
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Team").font(.title3.bold())
+            ScrollView {
+                VStack(spacing: 6) {
+                    ForEach(m.team.names, id: \.self) { name in
+                        MemberRow(name: name, done: m.turns.done.contains(name), removable: !m.spinning) { m.remove(name) }
+                    }
+                }
+            }
+            HStack {
+                TextField("Add name", text: $m.newName)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .glassEffect(.regular, in: .capsule)
+                    .focused(typingName)
+                    .accessibilityIdentifier("name-field")
+                    .onSubmit(m.add)
+                Button { m.add() } label: { Image(systemName: "plus") }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("add")
+            }
+        }
+        .padding(16)
+        .frame(width: 250)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .opacity(1 - 0.6 * m.focus)
+    }
+}
+
+struct MemberRow: View {
+    let name: String
+    let done: Bool
+    let removable: Bool
+    let remove: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(name)
+                .strikethrough(done)
+                .opacity(done ? 0.5 : 1)
+                .accessibilityIdentifier("member-\(name)")
+                .accessibilityValue(done ? "done" : "waiting")
+            Spacer()
+            Button(action: remove) { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .disabled(!removable)
+                .accessibilityIdentifier("remove-\(name)")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .glassEffect(.regular, in: .rect(cornerRadius: 12))
     }
 }
 
@@ -188,41 +218,51 @@ struct Flapper: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let r = faceRadius
             let points = WheelRadii.flapper(rootFromVertical: pose.rootFromVertical, tipFromVertical: pose.tipFromVertical)
-            func onScreen(_ p: YDownPoint) -> CGPoint { CGPoint(x: size.width / 2 + p.x * r, y: size.height / 2 + p.y * r) }
-            let pivot = onScreen(points.pivot), joint = onScreen(points.joint), end = onScreen(points.tip)
-            func direction(_ a: CGPoint, _ b: CGPoint) -> CGVector {
-                let length = hypot(b.x - a.x, b.y - a.y)
-                return CGVector(dx: (b.x - a.x) / length, dy: (b.y - a.y) / length)
-            }
-            let rootDir = direction(pivot, joint), tipDir = direction(joint, end)
-            let tipW = WheelRadii.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
-            func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
-            let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
-
-            var p = Path()
-            p.move(to: side(pivot, rootDir, rootW))
-            p.addLine(to: side(joint, jointDir, midW))
-            p.addLine(to: side(end, tipDir, tipW))
-            p.addArc(center: end, radius: tipW, startAngle: .radians(pose.tipFromVertical + .pi), endAngle: .radians(pose.tipFromVertical), clockwise: true)
-            p.addLine(to: side(joint, jointDir, -midW))
-            p.addLine(to: side(pivot, rootDir, -rootW))
-            p.closeSubpath()
-            ctx.drawLayer { l in
-                l.addFilter(.shadow(color: .black.opacity(0.5), radius: 2, x: 1, y: 2))
-                l.fill(p, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.75)]),
-                                                startPoint: CGPoint(x: pivot.x - rootW, y: pivot.y), endPoint: CGPoint(x: pivot.x + rootW, y: pivot.y)))
-            }
-            let capR = rootW * 1.5
-            ctx.drawLayer { l in
-                l.addFilter(.shadow(color: .black.opacity(0.5), radius: 1.5, y: 1))
-                l.fill(Path(ellipseIn: CGRect(x: pivot.x - capR, y: pivot.y - capR, width: capR * 2, height: capR * 2)),
-                       with: .radialGradient(Gradient(colors: [Color(white: 0.95), Color(white: 0.55)]),
-                                             center: CGPoint(x: pivot.x - capR * 0.3, y: pivot.y - capR * 0.3), startRadius: 0, endRadius: capR * 1.2))
-            }
+            func onScreen(_ p: YDownPoint) -> CGPoint { CGPoint(x: size.width / 2 + p.x * faceRadius, y: size.height / 2 + p.y * faceRadius) }
+            let pivot = onScreen(points.pivot)
+            let rootWidth = WheelRadii.armRadius * faceRadius * 2.4
+            drawArm(outline(pivot: pivot, joint: onScreen(points.joint), end: onScreen(points.tip)), pivot: pivot, rootWidth: rootWidth, in: ctx)
+            drawPivotCap(at: pivot, radius: rootWidth * 1.5, in: ctx)
         }
         .allowsHitTesting(false)
+    }
+
+    private func outline(pivot: CGPoint, joint: CGPoint, end: CGPoint) -> Path {
+        func direction(_ a: CGPoint, _ b: CGPoint) -> CGVector {
+            let length = hypot(b.x - a.x, b.y - a.y)
+            return CGVector(dx: (b.x - a.x) / length, dy: (b.y - a.y) / length)
+        }
+        func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
+        let rootDir = direction(pivot, joint), tipDir = direction(joint, end)
+        let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
+        let tipW = WheelRadii.armRadius * faceRadius, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
+        var p = Path()
+        p.move(to: side(pivot, rootDir, rootW))
+        p.addLine(to: side(joint, jointDir, midW))
+        p.addLine(to: side(end, tipDir, tipW))
+        p.addArc(center: end, radius: tipW, startAngle: .radians(pose.tipFromVertical + .pi), endAngle: .radians(pose.tipFromVertical), clockwise: true)
+        p.addLine(to: side(joint, jointDir, -midW))
+        p.addLine(to: side(pivot, rootDir, -rootW))
+        p.closeSubpath()
+        return p
+    }
+
+    private func drawArm(_ arm: Path, pivot: CGPoint, rootWidth: CGFloat, in ctx: GraphicsContext) {
+        ctx.drawLayer { l in
+            l.addFilter(.shadow(color: .black.opacity(0.5), radius: 2, x: 1, y: 2))
+            l.fill(arm, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.75)]),
+                                              startPoint: CGPoint(x: pivot.x - rootWidth, y: pivot.y), endPoint: CGPoint(x: pivot.x + rootWidth, y: pivot.y)))
+        }
+    }
+
+    private func drawPivotCap(at pivot: CGPoint, radius capR: CGFloat, in ctx: GraphicsContext) {
+        ctx.drawLayer { l in
+            l.addFilter(.shadow(color: .black.opacity(0.5), radius: 1.5, y: 1))
+            l.fill(Path(ellipseIn: CGRect(x: pivot.x - capR, y: pivot.y - capR, width: capR * 2, height: capR * 2)),
+                   with: .radialGradient(Gradient(colors: [Color(white: 0.95), Color(white: 0.55)]),
+                                         center: CGPoint(x: pivot.x - capR * 0.3, y: pivot.y - capR * 0.3), startRadius: 0, endRadius: capR * 1.2))
+        }
     }
 }
 
@@ -238,44 +278,55 @@ struct WheelFace: View {
                 ctx.fill(disc, with: .color(Color(white: 0.2)))
                 return
             }
-            for i in names.indices {
-                var p = Path()
-                p.move(to: c)
-                p.addArc(center: c, radius: r, startAngle: .radians(WheelRadii.sliceAngle(i, of: names.count)), endAngle: .radians(WheelRadii.sliceAngle(i + 1, of: names.count)), clockwise: false)
-                p.closeSubpath()
-                ctx.fill(p, with: .color(palette[i % palette.count]))
-            }
+            drawSlices(center: c, radius: r, in: ctx)
             ctx.fill(disc, with: .radialGradient(Gradient(colors: [.white.opacity(0.08), .clear, .black.opacity(0.18)]),
                                                  center: c, startRadius: 0, endRadius: r))
-
-            for (i, name) in names.enumerated() {
-                var t = ctx
-                t.translateBy(x: c.x, y: c.y)
-                t.rotate(by: .radians((WheelRadii.sliceAngle(i, of: names.count) + WheelRadii.sliceAngle(i + 1, of: names.count)) / 2))
-                let fontSize = min(24, max(11, r / CGFloat(max(names.count, 4)) * 0.9))
-                let text = Text(name).font(.system(size: fontSize, weight: .heavy, design: .rounded)).foregroundColor(.white)
-                t.drawLayer { l in
-                    l.addFilter(.shadow(color: .black.opacity(0.45), radius: 1.5, x: 0, y: 1))
-                    l.draw(text, at: CGPoint(x: r * 0.82, y: 0), anchor: .trailing)
-                }
-            }
-
-            for i in 0..<names.count {
-                let a = WheelRadii.sliceAngle(i, of: names.count)
-                var line = Path()
-                line.move(to: c)
-                line.addLine(to: CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r))
-                ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
-
-                let pegR = r * WheelRadii.pegRadius
-                let peg = WheelRadii.peg(i, of: names.count)
-                let pc = CGPoint(x: c.x + peg.x * r, y: c.y + peg.y * r)
-                ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR + 1, y: pc.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
-                ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR, y: pc.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
-                    Gradient(colors: [.white, Color(white: 0.6)]),
-                    center: CGPoint(x: pc.x - pegR * 0.35, y: pc.y - pegR * 0.35), startRadius: 0, endRadius: pegR * 1.3))
-            }
+            drawNames(center: c, radius: r, in: ctx)
+            drawDividersAndPegs(center: c, radius: r, in: ctx)
             ctx.stroke(disc, with: .color(.black.opacity(0.5)), lineWidth: 2)
+        }
+    }
+
+    private func angle(_ i: Int) -> Double { WheelRadii.sliceAngle(i, of: names.count) }
+
+    private func drawSlices(center c: CGPoint, radius r: CGFloat, in ctx: GraphicsContext) {
+        for i in names.indices {
+            var p = Path()
+            p.move(to: c)
+            p.addArc(center: c, radius: r, startAngle: .radians(angle(i)), endAngle: .radians(angle(i + 1)), clockwise: false)
+            p.closeSubpath()
+            ctx.fill(p, with: .color(palette[i % palette.count]))
+        }
+    }
+
+    private func drawNames(center c: CGPoint, radius r: CGFloat, in ctx: GraphicsContext) {
+        let fontSize = min(24, max(11, r / CGFloat(max(names.count, 4)) * 0.9))
+        for (i, name) in names.enumerated() {
+            var t = ctx
+            t.translateBy(x: c.x, y: c.y)
+            t.rotate(by: .radians((angle(i) + angle(i + 1)) / 2))
+            let text = Text(name).font(.system(size: fontSize, weight: .heavy, design: .rounded)).foregroundColor(.white)
+            t.drawLayer { l in
+                l.addFilter(.shadow(color: .black.opacity(0.45), radius: 1.5, x: 0, y: 1))
+                l.draw(text, at: CGPoint(x: r * 0.82, y: 0), anchor: .trailing)
+            }
+        }
+    }
+
+    private func drawDividersAndPegs(center c: CGPoint, radius r: CGFloat, in ctx: GraphicsContext) {
+        let pegR = r * WheelRadii.pegRadius
+        for i in 0..<names.count {
+            var line = Path()
+            line.move(to: c)
+            line.addLine(to: CGPoint(x: c.x + cos(angle(i)) * r, y: c.y + sin(angle(i)) * r))
+            ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
+
+            let peg = WheelRadii.peg(i, of: names.count)
+            let pc = CGPoint(x: c.x + peg.x * r, y: c.y + peg.y * r)
+            ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR + 1, y: pc.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
+            ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR, y: pc.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
+                Gradient(colors: [.white, Color(white: 0.6)]),
+                center: CGPoint(x: pc.x - pegR * 0.35, y: pc.y - pegR * 0.35), startRadius: 0, endRadius: pegR * 1.3))
         }
     }
 }
