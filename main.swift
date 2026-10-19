@@ -156,7 +156,8 @@ final class Model: ObservableObject {
     @Published var remaining: [String] = []
     @Published var done: [String] = []
     @Published var rotation: Double = 0      // radians, clockwise
-    @Published var flapper: Double = 0       // radians, 0 = hanging straight down
+    @Published var flapperRoot: Double = 0   // radians, 0 = hanging straight down
+    @Published var flapperTip: Double = 0
     @Published var focus: Double = 0
     @Published var spinning = false
     @Published var winner: String?
@@ -164,6 +165,10 @@ final class Model: ObservableObject {
 
     private var sim: WheelSim?
     private var ticker: Ticker?
+    /// While a finger holds the wheel: where the wheel should be, and recent finger angles for the flick.
+    private var dragTarget: Double?
+    private var fingerAngle = 0.0
+    private var fingerSamples: [(time: Date, angle: Double)] = []
     private let sound = Sound()
     private var spinStarted = Date()
     /// Set YOURTURN_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
@@ -186,29 +191,64 @@ final class Model: ObservableObject {
     }
 
     func spin() {
-        guard !spinning, !remaining.isEmpty else { return }
-        if let w = winner { remaining.removeAll { $0 == w }; done.append(w); winner = nil }
-        guard !remaining.isEmpty else { return }
-        spinning = true
+        guard start() else { return }
+        sim?.push(spinVelocity())
+    }
 
-        var sim = WheelSim(slices: remaining.count, theta: rotation)
-        sim.push(spinVelocity())
-        self.sim = sim
+    /// The finger is on the wheel at this angle (screen radians around the hub).
+    /// The first call grabs the wheel; later calls drag it round, flapper and all.
+    func drag(to angle: Double) {
+        if dragTarget == nil {
+            guard start() else { return }
+            dragTarget = rotation
+            fingerAngle = angle
+            fingerSamples = []
+        }
+        let delta = remainder(angle - fingerAngle, 2 * .pi)
+        fingerAngle += delta
+        dragTarget? += delta
+        fingerSamples.append((Date(), fingerAngle))
+        fingerSamples.removeAll { Date().timeIntervalSince($0.time) > 0.1 }
+    }
+
+    /// Let go: the wheel leaves in the flick's direction at a spin-strength speed.
+    func release() {
+        guard dragTarget != nil else { return }
+        dragTarget = nil
+        var flick = 0.0
+        if let first = fingerSamples.first, let last = fingerSamples.last, last.time > first.time {
+            flick = (last.angle - first.angle) / last.time.timeIntervalSince(first.time)
+        }
+        sim?.push(flickVelocity(flick))
+        spinStarted = Date()
+    }
+
+    /// Takes out the last winner and starts simulating; false if there's nothing to spin.
+    private func start() -> Bool {
+        guard !spinning, !remaining.isEmpty else { return false }
+        if let w = winner { remaining.removeAll { $0 == w }; done.append(w); winner = nil }
+        guard !remaining.isEmpty else { return false }
+        spinning = true
+        sim = WheelSim(slices: remaining.count, theta: rotation)
         spinStarted = Date()
         ticker?.stop()
         ticker = Ticker { [weak self] dt in self?.frame(dt) }
+        return true
     }
 
     private func frame(_ dt: Double) {
         guard var sim else { return }
-        sim.advance(min(dt, 1.0 / 20)) { offset, speed, reverse in
+        let dt = min(dt, 1.0 / 20)
+        if let dragTarget { sim.drive((dragTarget - sim.theta) / max(dt, 1.0 / 240)) }
+        sim.advance(dt) { offset, speed, reverse in
             sound.tick(speed: speed, delay: offset, reverse: reverse)
         }
         self.sim = sim
         rotation = sim.theta
-        flapper = sim.phi
+        flapperRoot = sim.root
+        flapperTip = sim.tip
         // Close in on the wheel as it runs out of speed.
-        focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4)))
+        if dragTarget == nil { focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4))) }
 
         guard sim.stopped else { return }
         ticker?.stop()
@@ -264,7 +304,8 @@ struct ContentView: View {
 
             HStack(spacing: 20) {
                 VStack(spacing: 28) {
-                    WheelAssembly(names: m.remaining, rotation: m.rotation, flapper: m.flapper)
+                    WheelAssembly(names: m.remaining, rotation: m.rotation, flapperRoot: m.flapperRoot, flapperTip: m.flapperTip,
+                                  onDrag: m.drag(to:), onRelease: m.release)
                         .accessibilityElement()
                         .accessibilityIdentifier("wheel")
                         .accessibilityValue(m.spinning ? "spinning" : "idle")
@@ -353,7 +394,10 @@ struct ContentView: View {
 struct WheelAssembly: View {
     let names: [String]
     let rotation: Double
-    let flapper: Double
+    let flapperRoot: Double
+    let flapperTip: Double
+    var onDrag: (Double) -> Void = { _ in }
+    var onRelease: () -> Void = {}
 
     var body: some View {
         GeometryReader { g in
@@ -366,10 +410,17 @@ struct WheelAssembly: View {
                     .frame(width: face, height: face)
                     .rotationEffect(.radians(rotation))
                 Hub(size: size * 0.1)
-                Flapper(angle: flapper, faceRadius: face / 2)
+                Flapper(root: flapperRoot, tip: flapperTip, faceRadius: face / 2)
             }
             .frame(width: size, height: size)
             .position(x: g.size.width / 2, y: g.size.height / 2)
+            .gesture(DragGesture(minimumDistance: 4)
+                .onChanged { v in
+                    let x = v.location.x - g.size.width / 2, y = v.location.y - g.size.height / 2
+                    // Near the hub the angle is meaningless; ignore until the finger moves out.
+                    if x * x + y * y > pow(size * 0.12, 2) { onDrag(atan2(y, x)) }
+                }
+                .onEnded { _ in onRelease() })
         }
         .aspectRatio(1, contentMode: .fit)
         .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
@@ -407,31 +458,37 @@ struct Hub: View {
     }
 }
 
-/// Drawn from the same `Geometry` the simulation collides against.
+/// Drawn from the same `Geometry` the simulation collides against: two
+/// segments that bend at the midpoint, tapering from the hinge to the tip.
 struct Flapper: View {
-    let angle: Double
+    let root: Double
+    let tip: Double
     let faceRadius: CGFloat
 
     var body: some View {
         Canvas { ctx, size in
             let r = faceRadius
+            let half = Geometry.armLength / 2 * r
             let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - Geometry.pivot * r)
-            let len = Geometry.armLength * r
-            let tipW = Geometry.armRadius * r
-            let rootW = tipW * 2.4
-            var arm = ctx
-            arm.translateBy(x: pivot.x, y: pivot.y)
-            arm.rotate(by: .radians(angle))
+            let rootDir = CGVector(dx: -sin(root), dy: cos(root)), tipDir = CGVector(dx: -sin(tip), dy: cos(tip))
+            let joint = CGPoint(x: pivot.x + rootDir.dx * half, y: pivot.y + rootDir.dy * half)
+            let end = CGPoint(x: joint.x + tipDir.dx * half, y: joint.y + tipDir.dy * half)
+            let tipW = Geometry.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
+            func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
+            let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
+
             var p = Path()
-            p.move(to: CGPoint(x: -rootW, y: 0))
-            p.addLine(to: CGPoint(x: rootW, y: 0))
-            p.addLine(to: CGPoint(x: tipW, y: len))
-            p.addArc(center: CGPoint(x: 0, y: len), radius: tipW, startAngle: .zero, endAngle: .degrees(180), clockwise: false)
+            p.move(to: side(pivot, rootDir, rootW))
+            p.addLine(to: side(joint, jointDir, midW))
+            p.addLine(to: side(end, tipDir, tipW))
+            p.addArc(center: end, radius: tipW, startAngle: .radians(tip + .pi), endAngle: .radians(tip), clockwise: true)
+            p.addLine(to: side(joint, jointDir, -midW))
+            p.addLine(to: side(pivot, rootDir, -rootW))
             p.closeSubpath()
-            arm.drawLayer { l in
+            ctx.drawLayer { l in
                 l.addFilter(.shadow(color: .black.opacity(0.5), radius: 2, x: 1, y: 2))
                 l.fill(p, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.75)]),
-                                                startPoint: CGPoint(x: -rootW, y: 0), endPoint: CGPoint(x: rootW, y: 0)))
+                                                startPoint: CGPoint(x: pivot.x - rootW, y: pivot.y), endPoint: CGPoint(x: pivot.x + rootW, y: pivot.y)))
             }
             let capR = rootW * 1.5
             ctx.drawLayer { l in
