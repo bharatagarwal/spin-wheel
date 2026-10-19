@@ -50,8 +50,11 @@ struct WheelSim {
         self.segment = 2 * .pi / Double(slices)
         self.theta = theta
         self.params = params
-        // Keep the energy taken per revolution roughly constant whatever the team size.
-        self.params.flapperStiffness *= 5 / Double(max(slices, 2))
+        // Keep the energy taken per revolution constant whatever the team size. Scaling
+        // spring and mass together keeps the flapper's natural frequency, so it looks the same.
+        let scale = 5 / Double(max(slices, 2))
+        self.params.flapperStiffness *= scale
+        self.params.flapperInertia *= scale
     }
 
     mutating func push(_ angularVelocity: Double) {
