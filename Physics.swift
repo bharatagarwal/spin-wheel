@@ -17,14 +17,14 @@ enum Geometry {
 struct WheelSim {
     struct Params {
         var wheelInertia = 1.0
-        var bearingFriction = 1.1       // Coulomb torque, gives a finite stop
+        var bearingFriction = 2.0       // Coulomb torque, gives a finite stop
         var viscousDrag = 0.02
         var airDrag = 0.001             // grows with speed squared
         var flapperInertia = 0.0007
-        var flapperStiffness = 3.0      // torsional spring, torque per radian
+        var flapperStiffness = 2.0      // torsional spring, torque per radian
         var flapperDampingRatio = 0.12
         var contactStiffness = 3e5      // Hertzian: force = k * depth^1.5
-        var contactDamping = 0.15       // Hunt–Crossley, sets how dead the knock is
+        var contactDamping = 0.6       // Hunt–Crossley, sets how dead the knock is
         var contactFriction = 0.15
     }
 
