@@ -134,7 +134,11 @@ final class Ticker: NSObject {
         link?.add(to: .main, forMode: .common)
     }
 
-    deinit { link?.invalidate() }
+    /// The display link retains its target, so this must be called; dropping the Ticker isn't enough.
+    func stop() {
+        link?.invalidate()
+        link = nil
+    }
 
     @objc private func step(_ link: CADisplayLink) {
         defer { last = link.timestamp }
@@ -175,6 +179,7 @@ final class Model: ObservableObject {
         var sim = WheelSim(slices: remaining.count, theta: rotation)
         sim.push(spinVelocity())
         self.sim = sim
+        ticker?.stop()
         ticker = Ticker { [weak self] dt in self?.frame(dt) }
     }
 
@@ -190,6 +195,7 @@ final class Model: ObservableObject {
         focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4)))
 
         guard sim.stopped else { return }
+        ticker?.stop()
         ticker = nil
         self.sim = nil
         let index = sim.winner
