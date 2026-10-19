@@ -17,7 +17,7 @@
 Not driven through `sw`; it is a plain command.
 
 - **Run.** `./test.sh 2000 | tee .verify/artifacts/fairness-$(date +%Y%m%d-%H%M%S).txt`. Exit code `0` means every size passed at p = 0.001; `1` means at least one `FAIL` line.
-- **Read.** Each line: `chi²` against its `limit`, `time p10/50/90`, `turns p10/50/90`, `rollback %`. At the time of writing: about 4–4.5 s and 2.1–2.7 turns per spin for every size, roll-back roughly 22–35% (46% at 12 slices).
+- **Read.** Each line: `chi²` against its `limit`, `time p10/50/90`, `turns p10/50/90`, `rollback %`. At the time of writing: about 4–4.4 s and 2.2–2.6 turns per spin for every size; roll-back mostly 18–30%, but it varies by size (46% at 8 slices, 3% at 10).
 - **Proof.** The saved output file and the exit code.
 
 ## Gotchas
