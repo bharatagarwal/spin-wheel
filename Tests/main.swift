@@ -1,7 +1,8 @@
 import Foundation
 
-// Headless fairness check: spin the real simulation many times and
-// chi-square the landing slices against a uniform distribution.
+// Headless check of the wheel physics: spin it many times per team size,
+// chi-square the landing slices against a uniform distribution, and report
+// how spins and the flapper behave.
 
 let spins = Int(CommandLine.arguments.dropFirst().first ?? "") ?? 3000
 // Critical chi-square values at p = 0.001, indexed by degrees of freedom.
@@ -10,17 +11,20 @@ var failed = false
 
 for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
     var counts = [Int](repeating: 0, count: slices)
-    var durations: [Double] = []
-    var turns: [Double] = []
+    var durations: [Double] = [], turns: [Double] = [], swings: [Double] = [], bends: [Double] = [], tips: [Double] = []
     var rollbacks = 0
-    for _ in 0..<spins {
+    for n in 0..<spins {
         let start = Double.random(in: 0..<(2 * .pi))
         var sim = WheelSim(slices: slices, theta: start)
-        sim.push(spinVelocity())
+        // Half the spins go anticlockwise, as a flick can.
+        sim.push(n % 2 == 0 ? spinVelocity() : -flickVelocity(spinVelocity()))
         while !sim.stopped { sim.advance(1.0 / 120) }
         counts[sim.winner] += 1
         durations.append(sim.time)
-        turns.append((sim.theta - start) / (2 * .pi))
+        turns.append(abs(sim.theta - start) / (2 * .pi))
+        swings.append(sim.peakSwing * 180 / .pi)
+        bends.append(sim.peakBend * 180 / .pi)
+        tips.append(sim.peakTip * 180 / .pi)
         if sim.rolledBack { rollbacks += 1 }
     }
     let expected = Double(spins) / Double(slices)
@@ -28,13 +32,13 @@ for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
     let limit = critical[slices - 1] ?? .infinity
     let ok = chi < limit
     failed = failed || !ok
-    durations.sort()
-    turns.sort()
-    func pct(_ a: [Double], _ q: Double) -> String { String(format: "%.1f", a[Int(Double(a.count - 1) * q)]) }
-    print(String(format: "%2d slices  chi²=%6.2f (limit %5.2f) %@  time p10/50/90 %@/%@/%@ s  turns %@/%@/%@  rollback %4.1f%%",
-                 slices, chi, limit, ok ? "ok  " : "FAIL",
-                 pct(durations, 0.1), pct(durations, 0.5), pct(durations, 0.9),
-                 pct(turns, 0.1), pct(turns, 0.5), pct(turns, 0.9),
-                 100 * Double(rollbacks) / Double(spins)))
+    func p50(_ a: [Double]) -> Double { a.sorted()[a.count / 2] }
+    func spread(_ a: [Double]) -> String {
+        let s = a.sorted()
+        return String(format: "%.1f/%.1f/%.1f", s[s.count / 10], s[s.count / 2], s[s.count * 9 / 10])
+    }
+    print(String(format: "%2d slices  chi²=%6.2f (limit %5.2f) %@  time %@ s  turns %@  rollback %4.1f%%  flapper tip %2.0f° (root %2.0f° + bend %2.0f°)",
+                 slices, chi, limit, ok ? "ok  " : "FAIL", spread(durations), spread(turns),
+                 100 * Double(rollbacks) / Double(spins), p50(tips), p50(swings), p50(bends)))
 }
 exit(failed ? 1 : 0)
