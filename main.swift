@@ -165,6 +165,9 @@ final class Model: ObservableObject {
     private var sim: WheelSim?
     private var ticker: Ticker?
     private let sound = Sound()
+    private var spinStarted = Date()
+    /// Set SPINWHEEL_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
+    private let verifyLog = ProcessInfo.processInfo.environment["SPINWHEEL_VERIFY_LOG"]
 
     var names: [String] {
         namesRaw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -179,6 +182,7 @@ final class Model: ObservableObject {
         var sim = WheelSim(slices: remaining.count, theta: rotation)
         sim.push(spinVelocity())
         self.sim = sim
+        spinStarted = Date()
         ticker?.stop()
         ticker = Ticker { [weak self] dt in self?.frame(dt) }
     }
@@ -204,6 +208,14 @@ final class Model: ObservableObject {
             spinning = false
         }
         sound.chime()
+        if let verifyLog {
+            let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", remaining.count, remaining[index], sim.time, Date().timeIntervalSince(spinStarted))
+            if let h = FileHandle(forWritingAtPath: verifyLog) ?? (FileManager.default.createFile(atPath: verifyLog, contents: nil) ? FileHandle(forWritingAtPath: verifyLog) : nil) {
+                h.seekToEndOfFile()
+                h.write(line.data(using: .utf8)!)
+                try? h.close()
+            }
+        }
         withAnimation(.easeOut(duration: 0.8).delay(0.6)) { focus = 0 }
     }
 
@@ -241,6 +253,11 @@ struct ContentView: View {
             HStack(spacing: 20) {
                 VStack(spacing: 28) {
                     WheelAssembly(names: m.remaining, rotation: m.rotation, flapper: m.flapper)
+                        .accessibilityElement()
+                        .accessibilityIdentifier("wheel")
+                        .accessibilityValue(m.spinning ? "spinning" : "idle")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { m.spin() }
                         .overlay {
                             Text(m.winner ?? " ")
                                 .font(.system(size: 40, weight: .bold, design: .rounded))
@@ -249,6 +266,7 @@ struct ContentView: View {
                                 .glassEffect(.regular, in: .capsule)
                                 .opacity(m.winner == nil ? 0 : 1)
                                 .scaleEffect(m.winner == nil ? 0.3 : 1)
+                                .accessibilityIdentifier("winner")
                         }
                         .scaleEffect(1 + 0.06 * m.focus)
                         .zIndex(1)
@@ -260,9 +278,11 @@ struct ContentView: View {
                                 .keyboardShortcut(.space, modifiers: [])
                                 .disabled(m.spinning || m.remaining.isEmpty)
                                 .buttonStyle(.glassProminent)
+                                .accessibilityIdentifier("spin")
                             Button("Reset") { m.reset() }
                                 .disabled(m.spinning)
                                 .buttonStyle(.glass)
+                                .accessibilityIdentifier("reset")
                         }
                         .controlSize(.extraLarge)
                     }
@@ -278,9 +298,12 @@ struct ContentView: View {
                                     Text(name)
                                         .strikethrough(m.done.contains(name))
                                         .opacity(m.done.contains(name) ? 0.5 : 1)
+                                        .accessibilityIdentifier("member-\(name)")
+                                        .accessibilityValue(m.done.contains(name) ? "done" : "waiting")
                                     Spacer()
                                     Button { m.remove(name) } label: { Image(systemName: "xmark") }
                                         .buttonStyle(.borderless)
+                                        .accessibilityIdentifier("remove-\(name)")
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 8)
                                 .glassEffect(.regular, in: .rect(cornerRadius: 12))
@@ -293,9 +316,11 @@ struct ContentView: View {
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .glassEffect(.regular, in: .capsule)
                             .focused($typingName)
+                            .accessibilityIdentifier("name-field")
                             .onSubmit(m.add)
                         Button { m.add() } label: { Image(systemName: "plus") }
                             .buttonStyle(.glass)
+                            .accessibilityIdentifier("add")
                     }
                 }
                 .padding(16)
