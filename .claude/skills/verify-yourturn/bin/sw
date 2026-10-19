@@ -30,6 +30,7 @@ build)
     plutil -replace CFBundleName -string "Your Turn Verify" $APP/Contents/Info.plist
     codesign -s - --force $APP 2>/dev/null
     swiftc -O $SKILL_DIR/bin/ax.swift -o $AX
+    swiftc -O $SKILL_DIR/bin/flick.swift -o $HOME_DIR/bin/flick
     print "built $APP"
     ;;
 launch)
@@ -82,6 +83,11 @@ spin)
     (( after > before )) || die "spin finished but nothing was logged"
     tail -1 $(artifacts)/spins.log
     ;;
+flick)
+    # sw flick [degrees] [seconds]: a real mouse drag around the wheel (moves the user's pointer!)
+    need_up; local f=($($AX $(pid) frame wheel)) deg=${1:-90} secs=${2:-0.15}
+    $HOME_DIR/bin/flick $(( f[1] + f[3] / 2 )) $(( f[2] + f[4] / 2 )) $(( f[3] * 35 / 100 )) $deg $secs
+    ;;
 press|get|wait|tree)
     need_up; $AX $(pid) $cmd "$@" ;;
 add)
@@ -118,6 +124,7 @@ sw spin [timeout]        press Spin, wait for the wheel to stop, print the logge
 sw press|get <id>        press / read an element by accessibility identifier
 sw wait <id> <value> [s] wait until an element reads <value>
 sw tree                  dump the accessibility tree with identifiers
+sw flick [deg] [s]       real mouse drag round the wheel then release (moves the pointer)
 sw add <name>            type a name into the field and press +
 sw names                 the persisted team list of the verify instance
 sw shot <name>           screenshot the window into the run's artifacts

@@ -106,4 +106,5 @@ Kills only the PID that `sw launch` recorded, deletes the `local.yourturn.verify
 ## Not covered by this harness
 
 - Physics fairness and spin-length statistics come from `./test.sh` (headless, no UI); see `features/fairness-test.md`.
+- Flick-to-spin needs a real mouse drag (`sw flick`); see `features/spin.md`.
 - Keyboard Space-to-spin needs a real keystroke into a frontmost window; see `features/spin.md` for how and when to do that.
