@@ -81,11 +81,10 @@ func render(_ px: Int) -> NSBitmapImageRep {
 
     drawBall(ctx, c, 46, shadow: 12)
 
-    // Flapper hanging from the rim, kicked sideways by a peg.
+    // Flapper hanging straight down from the rim.
     let pivot = CGPoint(x: c.x, y: c.y + outer - 6)
     ctx.saveGState()
     ctx.translateBy(x: pivot.x, y: pivot.y)
-    ctx.rotate(by: 0.32)
     ctx.setShadow(offset: CGSize(width: 4, height: -8), blur: 12, color: NSColor.black.withAlphaComponent(0.55).cgColor)
     let len: CGFloat = 112, root: CGFloat = 26, tip: CGFloat = 10
     ctx.move(to: CGPoint(x: -root, y: 0))
