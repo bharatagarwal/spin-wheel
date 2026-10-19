@@ -9,6 +9,8 @@ enum WheelRadii {
     static let armLength = 0.115
     static let segmentLength = armLength / 2
     static let armRadius = 0.010
+    static let flapperReach = armLength + armRadius + pegRadius
+    static let pegAngleReachableFromPointer = asin(min(1, flapperReach / pegCircle))
 }
 
 struct WheelSim {
@@ -119,9 +121,25 @@ struct WheelSim {
         let rootDamping = 2 * p.hingeDampingRatio * (p.hingeStiffness * p.hingeInertia).squareRoot()
         let bendDamping = 2 * p.bendDampingRatio * (p.bendStiffness * segmentMass * b * b).squareRoot()
         let bend = p.bendStiffness * (tipFromVertical - rootFromVertical) + bendDamping * (tipRate - rootRate)
-        var forceRoot = -p.hingeStiffness * rootFromVertical - rootDamping * rootRate + bend
-        var forceTip = -bend
+        let contacts = pegContacts()
+        stepFlapper(forceRoot: -p.hingeStiffness * rootFromVertical - rootDamping * rootRate + bend + contacts.forceRoot,
+                    forceTip: -bend + contacts.forceTip, segmentMass: segmentMass)
+        stepWheel(contactTorque: contacts.torque)
+        updateStopped()
+        return contacts.impact
+    }
 
+    private var pegsReachableFromPointer: Range<Int> {
+        let pointer = -Double.pi / 2 - clockwiseAngle
+        let first = Int(ceil((pointer - WheelRadii.pegAngleReachableFromPointer) / segment))
+        let last = Int(floor((pointer + WheelRadii.pegAngleReachableFromPointer) / segment))
+        return first..<max(first, last + 1)
+    }
+
+    private mutating func pegContacts() -> (forceRoot: Double, forceTip: Double, torque: Double, impact: Double?) {
+        let p = params
+        let a = WheelRadii.segmentLength, b = a
+        var forceRoot = 0.0, forceTip = 0.0
         let pivot: YDownPoint = (x: 0.0, y: -WheelRadii.pivot)
         let joint = points.joint
         let rootDir = (x: -sin(rootFromVertical), y: cos(rootFromVertical)), tipDir = (x: -sin(tipFromVertical), y: cos(tipFromVertical))
@@ -129,8 +147,7 @@ struct WheelSim {
         var impact: Double?
         var inContact = false
 
-        let pegBeforePointer = Int(floor((-.pi / 2 - clockwiseAngle) / segment))
-        for i in pegBeforePointer...(pegBeforePointer + 1) {
+        for i in pegsReachableFromPointer {
             let angle = clockwiseAngle + Double(i) * segment
             let cx = WheelRadii.pegCircle * cos(angle), cy = WheelRadii.pegCircle * sin(angle)
 
@@ -167,11 +184,7 @@ struct WheelSim {
             forceTip -= c.tipJacobian.x * fx + c.tipJacobian.y * fy
         }
         touching = inContact
-
-        stepFlapper(forceRoot: forceRoot, forceTip: forceTip, segmentMass: segmentMass)
-        stepWheel(contactTorque: contactTorque)
-        updateStopped()
-        return impact
+        return (forceRoot, forceTip, contactTorque, impact)
     }
 
     private mutating func stepFlapper(forceRoot: Double, forceTip: Double, segmentMass: Double) {
