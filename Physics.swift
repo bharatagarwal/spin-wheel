@@ -107,9 +107,9 @@ struct WheelSim {
     }
 
     private var points: (joint: YDownPoint, tip: YDownPoint) {
-        let half = WheelRadii.segmentLength
-        let joint = (x: -sin(rootFromVertical) * half, y: -WheelRadii.pivot + cos(rootFromVertical) * half)
-        return (joint, (x: joint.x - sin(tipFromVertical) * half, y: joint.y + cos(tipFromVertical) * half))
+        let segmentLength = WheelRadii.segmentLength
+        let joint = (x: -sin(rootFromVertical) * segmentLength, y: -WheelRadii.pivot + cos(rootFromVertical) * segmentLength)
+        return (joint, (x: joint.x - sin(tipFromVertical) * segmentLength, y: joint.y + cos(tipFromVertical) * segmentLength))
     }
 
     private mutating func substep() -> Double? {

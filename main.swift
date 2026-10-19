@@ -448,11 +448,11 @@ struct Flapper: View {
     var body: some View {
         Canvas { ctx, size in
             let r = faceRadius
-            let half = WheelRadii.armLength / 2 * r
+            let segmentLength = WheelRadii.segmentLength * r
             let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - WheelRadii.pivot * r)
             let rootDir = CGVector(dx: -sin(rootFromVertical), dy: cos(rootFromVertical)), tipDir = CGVector(dx: -sin(tipFromVertical), dy: cos(tipFromVertical))
-            let joint = CGPoint(x: pivot.x + rootDir.dx * half, y: pivot.y + rootDir.dy * half)
-            let end = CGPoint(x: joint.x + tipDir.dx * half, y: joint.y + tipDir.dy * half)
+            let joint = CGPoint(x: pivot.x + rootDir.dx * segmentLength, y: pivot.y + rootDir.dy * segmentLength)
+            let end = CGPoint(x: joint.x + tipDir.dx * segmentLength, y: joint.y + tipDir.dy * segmentLength)
             let tipW = WheelRadii.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
             func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
             let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
