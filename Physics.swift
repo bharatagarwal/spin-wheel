@@ -252,15 +252,25 @@ struct WheelSim {
     }
 }
 
-let buttonSpinSpeeds = 9.0...11.0
-let flickSpinSpeeds = 9.0...12.0
+let buttonPushMeanSpeed = 10.0
+let flickPushMeanSpeeds = 8.0...12.0
+let pushSpeedStandardDeviation = 2.0
+let pushSpeedMaxDeviations = 2.5
 
 func spinVelocity(using rng: inout some RandomNumberGenerator) -> Double {
-    Double.random(in: buttonSpinSpeeds, using: &rng)
+    normallyVariedPush(around: buttonPushMeanSpeed, using: &rng)
 }
 
 func flickVelocity(_ measured: Double, using rng: inout some RandomNumberGenerator) -> Double {
-    (measured < 0 ? -1 : 1) * flickSpinSpeeds.clamp(abs(measured)) * Double.random(in: 0.97...1.03, using: &rng)
+    (measured < 0 ? -1 : 1) * normallyVariedPush(around: flickPushMeanSpeeds.clamp(abs(measured)), using: &rng)
+}
+
+private func normallyVariedPush(around mean: Double, using rng: inout some RandomNumberGenerator) -> Double {
+    while true {
+        let u = Double.random(in: Double.ulpOfOne..<1, using: &rng), v = Double.random(in: 0..<1, using: &rng)
+        let deviations = (-2 * log(u)).squareRoot() * cos(2 * .pi * v)
+        if abs(deviations) <= pushSpeedMaxDeviations { return mean + pushSpeedStandardDeviation * deviations }
+    }
 }
 
 private extension ClosedRange where Bound == Double {
