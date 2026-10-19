@@ -31,7 +31,7 @@ Each property: the promise, then what the user would see if it broke.
 Check whether your change touches the covered code since the sync commit:
 
 ```sh
-git diff a5648c5 -- main.swift Physics.swift
+git diff 8304c92 -- main.swift Physics.swift
 ```
 
 Covered code. If your diff touches any of it, run the check, and re-read the matching model action:
@@ -117,4 +117,4 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 ## Coverage record
 
 - Files: `main.swift` (`Team`, `TurnOrder`, `SpinSession`, `Model`, and `ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
-- **Sync commit: `a5648c5`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
+- **Sync commit: `8304c92`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
