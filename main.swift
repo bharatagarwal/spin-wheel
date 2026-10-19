@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import QuartzCore
 
 @main
 struct SpinWheelApp: App {
@@ -43,23 +44,27 @@ final class Sound {
         }
     }
 
-    func tick(intensity: Double) {
+    /// A peg strike. Loudness and brightness follow the real impact speed; `delay` keeps
+    /// strikes spaced as they happened inside the frame; a roll-back strike sounds duller.
+    func tick(speed: Double, delay: Double, reverse: Bool) {
         guard let buffer = ticks.randomElement() else { return }
-        play(buffer, volume: Float(0.15 + 0.3 * intensity), rate: 0.95 + 0.1 * intensity)
+        let intensity = min(1, speed / 6)
+        let when = AVAudioTime(hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: delay))
+        play(buffer, volume: Float(0.08 + 0.37 * intensity), rate: (reverse ? 0.8 : 0.92) + 0.12 * intensity, at: when)
     }
 
     func chime() {
         if let reveal { play(reveal, volume: 0.7, rate: 1) }
     }
 
-    private func play(_ buffer: AVAudioPCMBuffer, volume: Float, rate: Double) {
+    private func play(_ buffer: AVAudioPCMBuffer, volume: Float, rate: Double, at when: AVAudioTime? = nil) {
         if !engine.isRunning { try? engine.start() }
         let p = players[next]
         next = (next + 1) % players.count
         p.stop()
         p.volume = volume
         p.rate = Float(rate)
-        p.scheduleBuffer(buffer)
+        p.scheduleBuffer(buffer, at: when)
         p.play()
     }
 
@@ -116,6 +121,28 @@ final class Sound {
     }
 }
 
+/// Calls back once per display refresh with the real elapsed time.
+final class Ticker: NSObject {
+    private let callback: (Double) -> Void
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval?
+
+    init(_ callback: @escaping (Double) -> Void) {
+        self.callback = callback
+        super.init()
+        link = NSScreen.main?.displayLink(target: self, selector: #selector(step))
+        link?.add(to: .main, forMode: .common)
+    }
+
+    deinit { link?.invalidate() }
+
+    @objc private func step(_ link: CADisplayLink) {
+        defer { last = link.timestamp }
+        guard let last else { return }
+        callback(link.timestamp - last)
+    }
+}
+
 let palette: [Color] = [.red, .orange, .yellow, .green, .mint, .teal, .blue, .indigo, .purple, .pink, .brown, .cyan]
 
 final class Model: ObservableObject {
@@ -124,14 +151,15 @@ final class Model: ObservableObject {
     }
     @Published var remaining: [String] = []
     @Published var done: [String] = []
-    @Published var rotation: Double = 0
-    @Published var flap: Double = 0
+    @Published var rotation: Double = 0      // radians, clockwise
+    @Published var flapper: Double = 0       // radians, 0 = hanging straight down
     @Published var focus: Double = 0
     @Published var spinning = false
     @Published var winner: String?
     @Published var newName = ""
 
-    private var timer: Timer?
+    private var sim: WheelSim?
+    private var ticker: Ticker?
     private let sound = Sound()
 
     var names: [String] {
@@ -144,79 +172,34 @@ final class Model: ObservableObject {
         guard !remaining.isEmpty else { return }
         spinning = true
 
-        let seg = 360.0 / Double(remaining.count)
-        let start = rotation
-        // Half the time, land just past a peg so the wheel teeters over it at the end.
-        let landing = Bool.random() ? Double.random(in: 0.03...0.12) : Double.random(in: 0.15...0.85)
-        let target = Double(Int.random(in: 0..<remaining.count)) + landing
-        var end = start + 360 * Double(Int.random(in: 4...6))
-        // Pointer sees wheel angle (270 - rotation); solve for the rotation that puts `target` under it.
-        let current = ((270 - end).truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
-        end += ((current - target * seg).truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
-
-        let duration = Double.random(in: 3.2...4)
-        let finalPeg = pegIndex(end, seg)
-        var lastPeg = pegIndex(start, seg)
-        var lastRotation = start
-        var elapsed = 0.0
-        var frozen = 0.0
-        var flapVelocity = 0.0
-        var last = Date()
-
-        timer = Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t in
-            guard let self else { return t.invalidate() }
-            let now = Date()
-            let dt = min(now.timeIntervalSince(last), 1 / 30)
-            last = now
-
-            // Flapper is a damped spring, so it wobbles past centre after each peg.
-            flapVelocity += (-420 * flap - 9 * flapVelocity) * dt
-            flap += flapVelocity * dt
-
-            if frozen > 0 {
-                frozen -= dt
-                return
-            }
-            elapsed += dt
-
-            let p = min(1, elapsed / duration)
-            // Quintic ease-out: fast start, long agonising crawl at the end.
-            rotation = start + (end - start) * (1 - pow(1 - p, 5))
-            focus = min(1, max(0, (elapsed - (duration - 1.2)) / 1))
-            let speed = rotation - lastRotation
-            lastRotation = rotation
-
-            let peg = pegIndex(rotation, seg)
-            if peg > lastPeg {
-                lastPeg = peg
-                flap = -min(38, 14 + speed * 6)
-                flapVelocity = 0
-                sound.tick(intensity: min(1, speed / 6))
-                // Hold on the deciding peg, like a hit-pause.
-                if peg == finalPeg { frozen = 0.18 }
-            }
-
-            if p >= 1 {
-                t.invalidate()
-                let a = ((270 - rotation).truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                    self.winner = self.remaining[min(Int(a / seg), self.remaining.count - 1)]
-                    self.spinning = false
-                }
-                self.sound.chime()
-                withAnimation(.easeOut(duration: 0.8).delay(0.6)) { self.focus = 0 }
-                // Let the flapper finish wobbling.
-                Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t2 in
-                    guard let self, abs(flap) > 0.05 || abs(flapVelocity) > 0.5 else { self?.flap = 0; return t2.invalidate() }
-                    flapVelocity += (-420 * flap - 9 * flapVelocity) / 120
-                    flap += flapVelocity / 120
-                }
-            }
-        }
-        RunLoop.main.add(timer!, forMode: .common)
+        var sim = WheelSim(slices: remaining.count, theta: rotation)
+        sim.push(spinVelocity())
+        self.sim = sim
+        ticker = Ticker { [weak self] dt in self?.frame(dt) }
     }
 
-    private func pegIndex(_ r: Double, _ seg: Double) -> Int { Int(floor((r - 270) / seg)) }
+    private func frame(_ dt: Double) {
+        guard var sim else { return }
+        sim.advance(min(dt, 1.0 / 20)) { offset, speed, reverse in
+            sound.tick(speed: speed, delay: offset, reverse: reverse)
+        }
+        self.sim = sim
+        rotation = sim.theta
+        flapper = sim.phi
+        // Close in on the wheel as it runs out of speed.
+        focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4)))
+
+        guard sim.stopped else { return }
+        ticker = nil
+        self.sim = nil
+        let index = sim.winner
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+            winner = remaining[index]
+            spinning = false
+        }
+        sound.chime()
+        withAnimation(.easeOut(duration: 0.8).delay(0.6)) { focus = 0 }
+    }
 
     func reset() {
         guard !spinning else { return }
@@ -242,6 +225,7 @@ final class Model: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var m = Model()
+    @FocusState private var typingName: Bool
 
     var body: some View {
         ZStack {
@@ -250,7 +234,7 @@ struct ContentView: View {
 
             HStack(spacing: 20) {
                 VStack(spacing: 28) {
-                    WheelAssembly(names: m.remaining, rotation: m.rotation, flap: m.flap)
+                    WheelAssembly(names: m.remaining, rotation: m.rotation, flapper: m.flapper)
                         .overlay {
                             Text(m.winner ?? " ")
                                 .font(.system(size: 40, weight: .bold, design: .rounded))
@@ -302,6 +286,7 @@ struct ContentView: View {
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .glassEffect(.regular, in: .capsule)
+                            .focused($typingName)
                             .onSubmit(m.add)
                         Button { m.add() } label: { Image(systemName: "plus") }
                             .buttonStyle(.glass)
@@ -314,32 +299,31 @@ struct ContentView: View {
             }
             .padding(24)
         }
-        .onAppear(perform: m.reset)
+        .onAppear {
+            m.reset()
+            // macOS focuses the text field at launch, which would swallow Space.
+            DispatchQueue.main.async { typingName = false }
+        }
     }
 }
 
 struct WheelAssembly: View {
     let names: [String]
     let rotation: Double
-    let flap: Double
+    let flapper: Double
 
     var body: some View {
         GeometryReader { g in
             let size = min(g.size.width, g.size.height)
             let rim = size * 0.035
             let face = size - rim * 2
-            let flapW = size * 0.065
-            let flapH = size * 0.13
             ZStack {
                 Rim(rimWidth: rim)
                 WheelFace(names: names)
                     .frame(width: face, height: face)
-                    .rotationEffect(.degrees(rotation))
+                    .rotationEffect(.radians(rotation))
                 Hub(size: size * 0.1)
-                Flapper()
-                    .frame(width: flapW, height: flapH)
-                    .rotationEffect(.degrees(flap), anchor: UnitPoint(x: 0.5, y: 0.5 * flapW / flapH))
-                    .position(x: size / 2, y: rim / 2 - flapW / 2 + flapH / 2)
+                Flapper(angle: flapper, faceRadius: face / 2)
             }
             .frame(width: size, height: size)
             .position(x: g.size.width / 2, y: g.size.height / 2)
@@ -380,25 +364,41 @@ struct Hub: View {
     }
 }
 
+/// Drawn from the same `Geometry` the simulation collides against.
 struct Flapper: View {
+    let angle: Double
+    let faceRadius: CGFloat
+
     var body: some View {
-        GeometryReader { g in
-            let w = g.size.width, h = g.size.height
-            ZStack(alignment: .top) {
-                Path { p in
-                    p.move(to: CGPoint(x: w * 0.12, y: w * 0.5))
-                    p.addLine(to: CGPoint(x: w * 0.88, y: w * 0.5))
-                    p.addQuadCurve(to: CGPoint(x: w * 0.5, y: h), control: CGPoint(x: w * 0.7, y: h * 0.75))
-                    p.addQuadCurve(to: CGPoint(x: w * 0.12, y: w * 0.5), control: CGPoint(x: w * 0.3, y: h * 0.75))
-                }
-                .fill(LinearGradient(colors: [.white, Color(white: 0.78)], startPoint: .leading, endPoint: .trailing))
-                .shadow(color: .black.opacity(0.55), radius: 3, x: 1, y: 3)
-                Circle()
-                    .fill(RadialGradient(colors: [Color(white: 0.95), Color(white: 0.55)], center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: w * 0.6))
-                    .frame(width: w, height: w)
-                    .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+        Canvas { ctx, size in
+            let r = faceRadius
+            let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - Geometry.pivot * r)
+            let len = Geometry.armLength * r
+            let tipW = Geometry.armRadius * r
+            let rootW = tipW * 2.4
+            var arm = ctx
+            arm.translateBy(x: pivot.x, y: pivot.y)
+            arm.rotate(by: .radians(angle))
+            var p = Path()
+            p.move(to: CGPoint(x: -rootW, y: 0))
+            p.addLine(to: CGPoint(x: rootW, y: 0))
+            p.addLine(to: CGPoint(x: tipW, y: len))
+            p.addArc(center: CGPoint(x: 0, y: len), radius: tipW, startAngle: .zero, endAngle: .degrees(180), clockwise: false)
+            p.closeSubpath()
+            arm.drawLayer { l in
+                l.addFilter(.shadow(color: .black.opacity(0.5), radius: 2, x: 1, y: 2))
+                l.fill(p, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.75)]),
+                                                startPoint: CGPoint(x: -rootW, y: 0), endPoint: CGPoint(x: rootW, y: 0)))
+            }
+            let capR = rootW * 1.5
+            ctx.drawLayer { l in
+                l.addFilter(.shadow(color: .black.opacity(0.5), radius: 1.5, y: 1))
+                l.fill(Path(ellipseIn: CGRect(x: pivot.x - capR, y: pivot.y - capR, width: capR * 2, height: capR * 2)),
+                       with: .radialGradient(Gradient(colors: [Color(white: 0.95), Color(white: 0.55)]),
+                                             center: CGPoint(x: pivot.x - capR * 0.3, y: pivot.y - capR * 0.3), startRadius: 0, endRadius: capR * 1.2))
             }
         }
+        .allowsHitTesting(false)
     }
 }
 
@@ -445,8 +445,8 @@ struct WheelFace: View {
                 line.addLine(to: CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r))
                 ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
 
-                let pegR = max(3, r * 0.016)
-                let pc = CGPoint(x: c.x + cos(a) * (r - pegR * 2.2), y: c.y + sin(a) * (r - pegR * 2.2))
+                let pegR = r * Geometry.pegRadius
+                let pc = CGPoint(x: c.x + cos(a) * r * Geometry.pegCircle, y: c.y + sin(a) * r * Geometry.pegCircle)
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR + 1, y: pc.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR, y: pc.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
                     Gradient(colors: [.white, Color(white: 0.6)]),

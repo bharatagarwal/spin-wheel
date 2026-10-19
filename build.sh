@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 APP=SpinWheel.app
 rm -rf $APP
 mkdir -p $APP/Contents/MacOS
-swiftc -O -parse-as-library main.swift -o $APP/Contents/MacOS/SpinWheel
+swiftc -O -parse-as-library main.swift Physics.swift -o $APP/Contents/MacOS/SpinWheel
 cat > $APP/Contents/Info.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
