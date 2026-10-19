@@ -171,7 +171,6 @@ struct Team {
 struct TurnOrder {
     private(set) var order: [String] = []
     private(set) var done: Set<String> = []
-    private(set) var winner: String?
     private(set) var wheel: [String] = []
 
     init(shuffling names: [String] = []) {
@@ -181,26 +180,27 @@ struct TurnOrder {
 
     var waiting: [String] { order.filter { !done.contains($0) } }
 
-    mutating func add(_ name: String, toWheel: Bool) {
+    mutating func add(_ name: String) {
         order.append(name)
-        if toWheel { wheel.append(name) }
+        wheel.append(name)
+    }
+
+    mutating func addForNextSpin(_ name: String) {
+        order.append(name)
     }
 
     mutating func remove(_ name: String) {
         order.removeAll { $0 == name }
         wheel.removeAll { $0 == name }
         done.remove(name)
-        if winner == name { winner = nil }
     }
 
     mutating func beginSpin() -> [String] {
-        winner = nil
         wheel = waiting
         return wheel
     }
 
-    mutating func pick(_ name: String) {
-        winner = name
+    mutating func markDone(_ name: String) {
         done.insert(name)
     }
 }
@@ -212,11 +212,22 @@ struct WheelPose {
 }
 
 final class SpinSession {
+    private struct Grip {
+        var target: Double
+        var fingerAngle: Double
+        var samples: [(time: Date, angle: Double)] = []
+    }
+
+    private enum Motion {
+        case held(Grip, Ticker)
+        case coasting(Ticker)
+        case finished
+    }
+
     let slices: [String]
     private(set) var released = Date()
     private var sim: WheelSim
-    private var ticker: Ticker?
-    private var grip: (target: Double, fingerAngle: Double, samples: [(time: Date, angle: Double)])?
+    private var motion = Motion.finished
     private let onFrame: (WheelSim, _ held: Bool) -> Void
     private let onImpact: (WheelSim.Impact) -> Void
     private let onStop: (WheelSim) -> Void
@@ -230,31 +241,33 @@ final class SpinSession {
         self.onFrame = onFrame
         self.onImpact = onImpact
         self.onStop = onStop
-        ticker = Ticker { [weak self] dt in self?.frame(dt) }
+        motion = .coasting(Ticker { [weak self] dt in self?.frame(dt) })
     }
 
     func push(_ clockwiseSpeed: Double) {
+        guard case .coasting = motion else { return }
         sim.push(clockwiseSpeed)
         released = Date()
     }
 
     func grab(at angle: Double) {
-        grip = (sim.clockwiseAngle, angle, [])
+        guard case .coasting(let ticker) = motion else { return }
+        motion = .held(Grip(target: sim.clockwiseAngle, fingerAngle: angle), ticker)
     }
 
     func drag(to angle: Double, at time: Date) {
-        guard var g = grip else { return }
+        guard case .held(var g, let ticker) = motion else { return }
         let delta = remainder(angle - g.fingerAngle, 2 * .pi)
         g.fingerAngle += delta
         g.target += delta
         g.samples.append((time, g.fingerAngle))
         g.samples.removeAll { time.timeIntervalSince($0.time) > 0.1 }
-        grip = g
+        motion = .held(g, ticker)
     }
 
     func release(using rng: inout some RandomNumberGenerator) {
-        guard let g = grip else { return }
-        grip = nil
+        guard case .held(let g, let ticker) = motion else { return }
+        motion = .coasting(ticker)
         var flick = 0.0
         if let first = g.samples.first, let last = g.samples.last, last.time > first.time {
             flick = (last.angle - first.angle) / last.time.timeIntervalSince(first.time)
@@ -264,12 +277,22 @@ final class SpinSession {
 
     private func frame(_ dt: Double) {
         let dt = min(dt, 1.0 / 20)
-        if let grip { sim.drive((grip.target - sim.clockwiseAngle) / max(dt, 1.0 / 240)) }
+        let ticker: Ticker
+        switch motion {
+        case .held(let grip, let t):
+            sim.drive((grip.target - sim.clockwiseAngle) / max(dt, 1.0 / 240))
+            ticker = t
+        case .coasting(let t):
+            ticker = t
+        case .finished:
+            return
+        }
         sim.advance(dt, onImpact: onImpact)
-        onFrame(sim, grip != nil)
+        let held = if case .held = motion { true } else { false }
+        onFrame(sim, held)
         guard sim.stopped else { return }
-        ticker?.stop()
-        ticker = nil
+        ticker.stop()
+        motion = .finished
         onStop(sim)
     }
 }
@@ -288,12 +311,17 @@ struct SpinLog {
 }
 
 final class Model: ObservableObject {
+    enum Phase {
+        case idle(winner: String?)
+        case spinning(SpinSession)
+    }
+
     @Published private(set) var team = Team.load() {
         didSet { team.save() }
     }
     @Published private(set) var turns = TurnOrder()
     @Published private(set) var pose = WheelPose()
-    @Published private(set) var session: SpinSession?
+    @Published private(set) var phase = Phase.idle(winner: nil)
     @Published var focus: Double = 0
     @Published var newName = ""
 
@@ -301,30 +329,43 @@ final class Model: ObservableObject {
     private let log = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"].map(SpinLog.init)
     private var rng = SystemRandomNumberGenerator()
 
-    var spinning: Bool { session != nil }
+    var spinning: Bool {
+        if case .spinning = phase { true } else { false }
+    }
+
+    var winner: String? {
+        if case .idle(let winner) = phase { winner } else { nil }
+    }
 
     func spin() {
-        guard begin() else { return }
-        session?.push(spinVelocity(using: &rng))
+        begin()?.push(spinVelocity(using: &rng))
     }
 
     func drag(to angle: Double, at time: Date) {
-        if session == nil, begin() { session?.grab(at: angle) }
-        session?.drag(to: angle, at: time)
+        switch phase {
+        case .idle:
+            guard let session = begin() else { return }
+            session.grab(at: angle)
+            session.drag(to: angle, at: time)
+        case .spinning(let session):
+            session.drag(to: angle, at: time)
+        }
     }
 
     func release() {
-        session?.release(using: &rng)
+        guard case .spinning(let session) = phase else { return }
+        session.release(using: &rng)
     }
 
-    private func begin() -> Bool {
-        guard session == nil, !turns.waiting.isEmpty else { return false }
-        session = SpinSession(
+    private func begin() -> SpinSession? {
+        guard case .idle = phase, !turns.waiting.isEmpty else { return nil }
+        let session = SpinSession(
             slices: turns.beginSpin(), clockwiseAngle: pose.clockwiseAngle,
             onFrame: { [weak self] sim, held in self?.show(sim, held: held) },
             onImpact: { [sound] impact in sound.tick(speed: impact.speed, delay: impact.offset, reverse: impact.reverse) },
             onStop: { [weak self] sim in self?.finish(sim) })
-        return true
+        phase = .spinning(session)
+        return session
     }
 
     private func show(_ sim: WheelSim, held: Bool) {
@@ -333,11 +374,11 @@ final class Model: ObservableObject {
     }
 
     private func finish(_ sim: WheelSim) {
-        guard let session else { return }
+        guard case .spinning(let session) = phase else { return }
         let name = session.slices[sim.winner]
         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-            turns.pick(name)
-            self.session = nil
+            turns.markDone(name)
+            phase = .idle(winner: name)
         }
         sound.chime()
         log?.record(session, winner: name, simTime: sim.time)
@@ -345,21 +386,26 @@ final class Model: ObservableObject {
     }
 
     func reset() {
-        guard !spinning else { return }
+        guard case .idle = phase else { return }
         turns = TurnOrder(shuffling: team.names)
+        phase = .idle(winner: nil)
     }
 
     func add() {
         let name = newName.trimmingCharacters(in: .whitespaces)
         guard team.add(name) else { return }
-        turns.add(name, toWheel: !spinning)
+        switch phase {
+        case .idle: turns.add(name)
+        case .spinning: turns.addForNextSpin(name)
+        }
         newName = ""
     }
 
     func remove(_ name: String) {
-        guard !spinning else { return }
+        guard case .idle(let winner) = phase else { return }
         team.remove(name)
         turns.remove(name)
+        if winner == name { phase = .idle(winner: nil) }
     }
 }
 
@@ -382,13 +428,13 @@ struct ContentView: View {
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction { m.spin() }
                         .overlay {
-                            Text(m.turns.winner ?? " ")
+                            Text(m.winner ?? " ")
                                 .font(.system(size: 40, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 32).padding(.vertical, 14)
                                 .glassEffect(.regular, in: .capsule)
-                                .opacity(m.turns.winner == nil ? 0 : 1)
-                                .scaleEffect(m.turns.winner == nil ? 0.3 : 1)
+                                .opacity(m.winner == nil ? 0 : 1)
+                                .scaleEffect(m.winner == nil ? 0.3 : 1)
                                 .accessibilityIdentifier("winner")
                         }
                         .scaleEffect(1 + 0.06 * m.focus)
