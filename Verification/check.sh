@@ -15,7 +15,7 @@ fi
 [[ $(shasum -a 256 $JAR | cut -d' ' -f1) == $TLC_SHA256 ]] || { print "tla2tools.jar checksum mismatch"; exit 2 }
 
 ALL=(PickedFromTeam PickedOnce BannerOnWheel WheelFrozenWhileSpinning NoDuplicateSlices NotPickedWhileHeld)
-KNOWN_FINDINGS=(NotPickedWhileHeld)
+KNOWN_FINDINGS=()
 props=(${@:-$ALL})
 out=${HERE:h}/.verify/tla; mkdir -p $out
 rc=0

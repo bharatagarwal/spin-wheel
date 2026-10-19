@@ -18,6 +18,9 @@ MUTANTS = [
      'IF phase = "idle" THEN Append(wheel, n) ELSE wheel', "Append(wheel, n)"),
     ("NoDuplicateSlices", "Team.add(_:) drops its `!names.contains(name)` check",
      "    /\\ n \\notin Range(team)\n", ""),
+    ("NotPickedWhileHeld", "WheelSim.settle() applies the 30 s cap while .held again",
+     'Timeout == phase = "spinning" /\\ motion = "coasting" /\\ Finish(FALSE)',
+     'Timeout == phase = "spinning" /\\ motion \\in {"held", "coasting"} /\\ Finish(motion = "held")'),
 ]
 
 missed = 0

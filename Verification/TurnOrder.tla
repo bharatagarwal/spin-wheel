@@ -82,8 +82,8 @@ Finish(heldNow) ==
 \* WheelSim settles to .stopped only from .stuck, which a held wheel never is.
 Settle == phase = "spinning" /\ motion = "coasting" /\ Finish(FALSE)
 
-\* WheelSim.settle(): `if time > 30 { phase = .stopped }`, in any phase.
-Timeout == phase = "spinning" /\ motion \in {"held", "coasting"} /\ Finish(motion = "held")
+\* WheelSim.settle(): the 30 s cap, counted from push() and skipped while .held.
+Timeout == phase = "spinning" /\ motion = "coasting" /\ Finish(FALSE)
 
 \* Model.add(): Team.add rejects duplicates; idle -> turns.add, spinning -> turns.addForNextSpin.
 Add(n) ==

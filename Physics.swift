@@ -81,6 +81,7 @@ struct WheelSim {
 
     static let step = 1.0 / 8000
     private var carry = 0.0
+    private var releasedAt = 0.0
     private var touching = false
 
     init(slices: Int, clockwiseAngle: Double = 0, params: Params = Params()) {
@@ -94,6 +95,7 @@ struct WheelSim {
         clockwiseSpeed = angularVelocity
         pushDirection = angularVelocity < 0 ? -1 : 1
         phase = .turning
+        releasedAt = time
     }
 
     mutating func drive(_ angularVelocity: Double) {
@@ -245,7 +247,8 @@ struct WheelSim {
             let settled = flapperStill ? stillFor + h : 0
             phase = settled > 0.15 ? .stopped : .stuck(stillFor: settled)
         }
-        if time > 30 { phase = .stopped }
+        let held = if case .held = phase { true } else { false }
+        if !held, time - releasedAt > 30 { phase = .stopped }
     }
 }
 
