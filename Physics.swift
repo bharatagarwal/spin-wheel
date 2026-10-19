@@ -17,11 +17,11 @@ enum Geometry {
 struct WheelSim {
     struct Params {
         var wheelInertia = 1.0
-        var bearingFriction = 1.8       // Coulomb torque, gives a finite stop
-        var viscousDrag = 0.05
-        var airDrag = 0.004             // grows with speed squared
+        var bearingFriction = 1.1       // Coulomb torque, gives a finite stop
+        var viscousDrag = 0.02
+        var airDrag = 0.001             // grows with speed squared
         var flapperInertia = 0.0007
-        var flapperStiffness = 4.0      // torsional spring, torque per radian
+        var flapperStiffness = 3.0      // torsional spring, torque per radian
         var flapperDampingRatio = 0.12
         var contactStiffness = 3e5      // Hertzian: force = k * depth^1.5
         var contactDamping = 0.15       // Hunt–Crossley, sets how dead the knock is
@@ -131,7 +131,8 @@ struct WheelSim {
         time += h
         if omega < -0.05 { rolledBack = true }
 
-        if abs(omega) < 0.02, abs(phiDot) < 0.3, !inContact {
+        // Coming to rest pressed against a peg is a valid stop; the tip still marks the slice.
+        if abs(omega) < 0.02, abs(phiDot) < 0.3 {
             still += h
             if still > 0.25 { stopped = true; omega = 0 }
         } else {
@@ -143,4 +144,4 @@ struct WheelSim {
 }
 
 /// Strength of a button-press spin, in radians per second.
-func spinVelocity() -> Double { Double.random(in: 12...15) }
+func spinVelocity() -> Double { Double.random(in: 9...11) }
