@@ -1,11 +1,11 @@
 ---
 name: verify-hotpotato
-description: Launch and drive the Hot Potato macOS app (SwiftUI standup picker in this repo) through the accessibility API to prove behaviour - spinning and picking a winner, editing the team list, Reset - with screenshots and a per-spin log as evidence. Use whenever you change main.swift or Physics.swift and need to confirm the change in the real app, or when asked to run, screenshot or verify the app.
+description: Launch and drive the Hot Potato macOS app (SwiftUI standup picker in this repo) through the accessibility API to prove behaviour - spinning and picking a winner, editing the team list, Reset - with screenshots and a per-spin log as evidence. Use whenever you change the app's Swift sources (main.swift, Session.swift, Turns.swift, Sound.swift, Physics.swift) and need to confirm the change in the real app, or when asked to run, screenshot or verify the app.
 ---
 
 # Verify Hot Potato
 
-Hot Potato is a single-window SwiftUI macOS app (`main.swift`, `Physics.swift`, built by `./build.sh` into `HotPotato.app`). There is no server, no CLI surface and no web UI: the user touches one window. You drive it with `bin/sw`, which builds an isolated copy of the app, launches it, and presses controls by **accessibility identifier** through a small AX tool (`bin/ax.swift`, compiled by `sw build`).
+Hot Potato is a single-window SwiftUI macOS app (the `*.swift` files at the repo root, built by `./build.sh` into `HotPotato.app`). There is no server, no CLI surface and no web UI: the user touches one window. You drive it with `bin/sw`, which builds an isolated copy of the app, launches it, and presses controls by **accessibility identifier** through a small AX tool (`bin/ax.swift`, compiled by `sw build`).
 
 All commands below run from the repo root. `sw` is `.claude/skills/verify-hotpotato/bin/sw`:
 
@@ -45,7 +45,7 @@ Run first, and again whenever anything looks off:
 $SW doctor
 ```
 
-All lines must read `ok`: instance running, process is our verify build, bundle id `local.hotpotato.verify`, build newer than `main.swift` and `Physics.swift`, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
+All lines must read `ok`: instance running, process is our verify build, bundle id `local.hotpotato.verify`, build newer than every `*.swift` at the repo root, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
 
 ## Drive
 

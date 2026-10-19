@@ -1,6 +1,6 @@
 ---
 name: verify-turn-order
-description: Model-check who Hot Potato calls on - the round phase, turn order and spin motion in main.swift (Model, TurnOrder, Team, SpinSession) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
+description: Model-check who Hot Potato calls on - the round phase, turn order and spin motion in Turns.swift and Session.swift (Team, TurnOrder, SpinSession, Model) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
 ---
 
 # Verify turn order
@@ -31,7 +31,7 @@ Each property: the promise, then what the user would see if it broke.
 Check whether your change touches the covered code since the sync commit:
 
 ```sh
-git diff 8304c92 -- main.swift Physics.swift
+git diff 8304c92 -- Turns.swift Session.swift main.swift Physics.swift
 ```
 
 Covered code. If your diff touches any of it, run the check, and re-read the matching model action:
@@ -116,5 +116,5 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 
 ## Coverage record
 
-- Files: `main.swift` (`Team`, `TurnOrder`, `SpinSession`, `Model`, and `ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
+- Files: `Turns.swift` (`Team`, `TurnOrder`), `Session.swift` (`SpinSession`, `Model`), `main.swift` (`ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
 - **Sync commit: `8304c92`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.

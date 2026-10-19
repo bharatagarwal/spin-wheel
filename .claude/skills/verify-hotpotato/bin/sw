@@ -64,7 +64,7 @@ doctor)
     check "instance running (pid $(pid))" alive
     check "process is our verify build" "ps -p $(pid) -o command= | grep -q '$APP/Contents/MacOS/HotPotato'"
     check "bundle id is $DOMAIN" "[[ \$(plutil -extract CFBundleIdentifier raw $APP/Contents/Info.plist) == $DOMAIN ]]"
-    check "verify build is newer than sources" "[[ $APP/Contents/MacOS/HotPotato -nt $REPO/main.swift && $APP/Contents/MacOS/HotPotato -nt $REPO/Physics.swift ]]"
+    check "verify build is newer than sources" "[[ -z \$(find $REPO -maxdepth 1 -name '*.swift' -newer $APP/Contents/MacOS/HotPotato) ]]"
     check "accessibility reachable (#spin found)" "$AX $(pid) get spin"
     check "window on screen" "$AX $(pid) window-id"
     print "      names: $(defaults read $DOMAIN names 2>/dev/null | tr '\n' ',' || print '-')"
