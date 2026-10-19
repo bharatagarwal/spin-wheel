@@ -11,6 +11,19 @@ enum WheelRadii {
     static let armRadius = 0.010
     static let flapperReach = armLength + armRadius + pegRadius
     static let pegAngleReachableFromPointer = asin(min(1, flapperReach / pegCircle))
+
+    static func flapper(rootFromVertical: Double, tipFromVertical: Double) -> (pivot: YDownPoint, joint: YDownPoint, tip: YDownPoint) {
+        let pivot = (x: 0.0, y: -WheelRadii.pivot)
+        let joint = (x: pivot.x - sin(rootFromVertical) * segmentLength, y: pivot.y + cos(rootFromVertical) * segmentLength)
+        return (pivot, joint, (x: joint.x - sin(tipFromVertical) * segmentLength, y: joint.y + cos(tipFromVertical) * segmentLength))
+    }
+
+    static func sliceAngle(_ i: Int, of slices: Int) -> Double { Double(i) * 2 * .pi / Double(slices) }
+
+    static func peg(_ i: Int, of slices: Int, wheelAngle: Double = 0) -> YDownPoint {
+        let angle = wheelAngle + sliceAngle(i, of: slices)
+        return (x: pegCircle * cos(angle), y: pegCircle * sin(angle))
+    }
 }
 
 struct WheelSim {
@@ -39,6 +52,12 @@ struct WheelSim {
         }
     }
 
+    enum Bearing {
+        case held(clockwiseSpeed: Double)
+        case turning
+        case stuck
+    }
+
     struct Impact {
         let offset: Double
         let speed: Double
@@ -57,18 +76,13 @@ struct WheelSim {
     private(set) var tipRate = 0.0
     private(set) var time = 0.0
     private(set) var stopped = false
-    private(set) var rolledBack = false
-    private(set) var peakRoot = 0.0
-    private(set) var peakBend = 0.0
-    private(set) var peakTip = 0.0
+    private(set) var pushDirection = 1.0
+    private(set) var bearing = Bearing.stuck
 
     static let step = 1.0 / 8000
     private var carry = 0.0
     private var touching = false
     private var still = 0.0
-    private var stuck = true
-    private var fingerSpeed: Double?
-    private var direction = 1.0
 
     init(slices: Int, clockwiseAngle: Double = 0, params: Params = Params()) {
         self.slices = slices
@@ -79,23 +93,22 @@ struct WheelSim {
 
     mutating func push(_ angularVelocity: Double) {
         clockwiseSpeed = angularVelocity
-        direction = angularVelocity < 0 ? -1 : 1
-        fingerSpeed = nil
-        stuck = false
+        pushDirection = angularVelocity < 0 ? -1 : 1
+        bearing = .turning
         stopped = false
     }
 
     mutating func drive(_ angularVelocity: Double) {
-        fingerSpeed = angularVelocity
-        stuck = false
+        bearing = .held(clockwiseSpeed: angularVelocity)
         stopped = false
     }
 
-    mutating func advance(_ dt: Double, onImpact: (Impact) -> Void = { _ in }) {
+    mutating func advance(_ dt: Double, onImpact: (Impact) -> Void = { _ in }, onStep: (WheelSim) -> Void = { _ in }) {
         carry += dt
         var elapsed = 0.0
         while carry >= Self.step, !stopped {
-            if let speed = substep() { onImpact(Impact(offset: elapsed, speed: speed, reverse: clockwiseSpeed * direction < 0)) }
+            if let speed = substep() { onImpact(Impact(offset: elapsed, speed: speed, reverse: clockwiseSpeed * pushDirection < 0)) }
+            onStep(self)
             carry -= Self.step
             elapsed += Self.step
         }
@@ -108,10 +121,8 @@ struct WheelSim {
         return min(Int(a / segment), slices - 1)
     }
 
-    private var points: (joint: YDownPoint, tip: YDownPoint) {
-        let segmentLength = WheelRadii.segmentLength
-        let joint = (x: -sin(rootFromVertical) * segmentLength, y: -WheelRadii.pivot + cos(rootFromVertical) * segmentLength)
-        return (joint, (x: joint.x - sin(tipFromVertical) * segmentLength, y: joint.y + cos(tipFromVertical) * segmentLength))
+    private var points: (pivot: YDownPoint, joint: YDownPoint, tip: YDownPoint) {
+        WheelRadii.flapper(rootFromVertical: rootFromVertical, tipFromVertical: tipFromVertical)
     }
 
     private mutating func substep() -> Double? {
@@ -140,16 +151,14 @@ struct WheelSim {
         let p = params
         let a = WheelRadii.segmentLength, b = a
         var forceRoot = 0.0, forceTip = 0.0
-        let pivot: YDownPoint = (x: 0.0, y: -WheelRadii.pivot)
-        let joint = points.joint
+        let (pivot, joint, _) = points
         let rootDir = (x: -sin(rootFromVertical), y: cos(rootFromVertical)), tipDir = (x: -sin(tipFromVertical), y: cos(tipFromVertical))
         var contactTorque = 0.0
         var impact: Double?
         var inContact = false
 
         for i in pegsReachableFromPointer {
-            let angle = clockwiseAngle + Double(i) * segment
-            let cx = WheelRadii.pegCircle * cos(angle), cy = WheelRadii.pegCircle * sin(angle)
+            let (cx, cy) = WheelRadii.peg(i, of: slices, wheelAngle: clockwiseAngle)
 
             var best: (depth: Double, q: YDownPoint, rootJacobian: YDownPoint, tipJacobian: YDownPoint)?
             for outer in [false, true] {
@@ -204,33 +213,30 @@ struct WheelSim {
     private mutating func stepWheel(contactTorque: Double) {
         let p = params
         let h = Self.step
-        if let fingerSpeed {
+        switch bearing {
+        case .held(let fingerSpeed):
             clockwiseSpeed = fingerSpeed
-        } else {
-            if stuck, abs(contactTorque) > p.staticFriction { stuck = false }
-            if !stuck {
-                let sliding = clockwiseSpeed != 0 ? (clockwiseSpeed > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
-                let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
-                let next = clockwiseSpeed + torque / p.wheelInertia * h
-                if next * sliding <= 0 {
-                    clockwiseSpeed = 0
-                    stuck = abs(contactTorque) <= p.staticFriction
-                } else {
-                    clockwiseSpeed = next
-                }
+        case .stuck where abs(contactTorque) <= p.staticFriction:
+            break
+        case .stuck, .turning:
+            let sliding = clockwiseSpeed != 0 ? (clockwiseSpeed > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
+            let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
+            let next = clockwiseSpeed + torque / p.wheelInertia * h
+            if next * sliding <= 0 {
+                clockwiseSpeed = 0
+                bearing = abs(contactTorque) <= p.staticFriction ? .stuck : .turning
+            } else {
+                clockwiseSpeed = next
+                bearing = .turning
             }
         }
         clockwiseAngle += clockwiseSpeed * h
         time += h
-        if clockwiseSpeed * direction < -0.05 { rolledBack = true }
-        peakRoot = max(peakRoot, abs(rootFromVertical))
-        peakBend = max(peakBend, abs(tipFromVertical - rootFromVertical))
-        peakTip = max(peakTip, abs(tipFromVertical))
     }
 
     private mutating func updateStopped() {
         let h = Self.step
-        if fingerSpeed == nil, stuck, abs(rootRate) < 0.3, abs(tipRate) < 0.6 {
+        if case .stuck = bearing, abs(rootRate) < 0.3, abs(tipRate) < 0.6 {
             still += h
             if still > 0.15 { stopped = true }
         } else {
@@ -243,10 +249,12 @@ struct WheelSim {
 let buttonSpinSpeeds = 9.0...11.0
 let flickSpinSpeeds = 9.0...12.0
 
-func spinVelocity() -> Double { Double.random(in: buttonSpinSpeeds) }
+func spinVelocity(using rng: inout some RandomNumberGenerator) -> Double {
+    Double.random(in: buttonSpinSpeeds, using: &rng)
+}
 
-func flickVelocity(_ measured: Double) -> Double {
-    (measured < 0 ? -1 : 1) * flickSpinSpeeds.clamp(abs(measured)) * Double.random(in: 0.97...1.03)
+func flickVelocity(_ measured: Double, using rng: inout some RandomNumberGenerator) -> Double {
+    (measured < 0 ? -1 : 1) * flickSpinSpeeds.clamp(abs(measured)) * Double.random(in: 0.97...1.03, using: &rng)
 }
 
 private extension ClosedRange where Bound == Double {
