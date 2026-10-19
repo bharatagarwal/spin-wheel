@@ -11,7 +11,7 @@ cat > $APP/Contents/Info.plist <<EOF
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>YourTurn</string>
-<key>CFBundleIdentifier</key><string>local.spinwheel</string><!-- kept from the old name: UserDefaults (the team list) live under it -->
+<key>CFBundleIdentifier</key><string>local.yourturn</string>
 <key>CFBundleName</key><string>Your Turn</string>
 <key>CFBundleDisplayName</key><string>Your Turn</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>

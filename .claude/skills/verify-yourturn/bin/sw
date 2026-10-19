@@ -8,7 +8,7 @@ HOME_DIR=${YOURTURN_VERIFY_HOME:-$REPO/.verify}
 STATE=$HOME_DIR/state
 APP=$HOME_DIR/YourTurnVerify.app
 AX=$HOME_DIR/bin/ax
-DOMAIN=local.spinwheel.verify
+DOMAIN=local.yourturn.verify
 DEFAULT_NAMES=(Alice Bob Charlie Dana Eve)
 
 die() { print -u2 "sw: $*"; exit 1; }

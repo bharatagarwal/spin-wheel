@@ -150,7 +150,7 @@ final class Ticker: NSObject {
 let palette: [Color] = [.red, .orange, .yellow, .green, .mint, .teal, .blue, .indigo, .purple, .pink, .brown, .cyan]
 
 final class Model: ObservableObject {
-    @Published var namesRaw = UserDefaults.standard.string(forKey: "names") ?? "Alice\nBob\nCharlie\nDana" {
+    @Published var namesRaw = Model.savedNames() {
         didSet { UserDefaults.standard.set(namesRaw, forKey: "names") }
     }
     @Published var remaining: [String] = []
@@ -168,6 +168,18 @@ final class Model: ObservableObject {
     private var spinStarted = Date()
     /// Set YOURTURN_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
     private let verifyLog = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"]
+
+    /// The team list. Versions before the rename stored it under the old bundle id
+    /// `local.spinwheel`; copy it across once, leaving the old store untouched.
+    private static func savedNames() -> String {
+        let defaults = UserDefaults.standard
+        if let names = defaults.string(forKey: "names") { return names }
+        if let legacy = UserDefaults(suiteName: "local.spinwheel")?.string(forKey: "names") {
+            defaults.set(legacy, forKey: "names")
+            return legacy
+        }
+        return "Alice\nBob\nCharlie\nDana"
+    }
 
     var names: [String] {
         namesRaw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

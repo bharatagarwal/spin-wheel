@@ -17,7 +17,7 @@ The feature map in `features/` is the maintained list of user journeys. Read `fe
 
 ## Isolation: what makes this safe
 
-- `sw build` copies the app to `.verify/YourTurnVerify.app` with bundle id `local.spinwheel.verify`, so it has its **own UserDefaults**. The user's real team list lives under `local.spinwheel` and is never read or written.
+- `sw build` copies the app to `.verify/YourTurnVerify.app` with bundle id `local.yourturn.verify`, so it has its **own UserDefaults**. The user's real team list lives under `local.yourturn` and is never written. (If a domain has no `names`, the app copies them once from the pre-rename domain `local.spinwheel`; `sw launch` always seeds `names`, so the verify copy never does this.)
 - Driving is by AX actions on our own PID, not keystrokes or clicks, so it does not need the window to be frontmost and does not type into whatever the user has focused. It can run alongside the user's own copy of the app.
 - Only one verification instance at a time: `sw launch` refuses if one is already running. Do not drive the user's `/Applications/Your Turn.app` or a copy you did not launch.
 
@@ -45,7 +45,7 @@ Run first, and again whenever anything looks off:
 $SW doctor
 ```
 
-All lines must read `ok`: instance running, process is our verify build, bundle id `local.spinwheel.verify`, build newer than `main.swift` and `Physics.swift`, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
+All lines must read `ok`: instance running, process is our verify build, bundle id `local.yourturn.verify`, build newer than `main.swift` and `Physics.swift`, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
 
 ## Drive
 
@@ -96,7 +96,7 @@ Proof standards:
 $SW stop
 ```
 
-Kills only the PID that `sw launch` recorded, deletes the `local.spinwheel.verify` defaults, and removes `.verify/state/`. It keeps `.verify/artifacts/` and `.verify/YourTurnVerify.app` (rebuilt by the next `sw build`). Run it after every attempt, including failed ones, before launching again. Never `pkill YourTurn`: that would also kill the user's own copy.
+Kills only the PID that `sw launch` recorded, deletes the `local.yourturn.verify` defaults, and removes `.verify/state/`. It keeps `.verify/artifacts/` and `.verify/YourTurnVerify.app` (rebuilt by the next `sw build`). Run it after every attempt, including failed ones, before launching again. Never `pkill YourTurn`: that would also kill the user's own copy.
 
 ## Helpers
 
