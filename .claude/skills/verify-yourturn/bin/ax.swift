@@ -1,5 +1,3 @@
-// Accessibility driver for the Your Turn verification instance.
-// Usage: ax <pid> tree | press <id> | get <id> | set <id> <text> | wait <id> <value> [seconds] | frame <id> | window-id
 import AppKit
 import ApplicationServices
 
@@ -75,7 +73,6 @@ case "wait":
     }
     fail("timed out waiting for #\(args[3]) == \"\(args[4])\"")
 case "frame":
-    // Screen frame of an element, "x y w h" in points (top-left origin), for real mouse input.
     guard args.count == 4, let e = find(app, args[3]), let pos = attr(e, kAXPositionAttribute), let size = attr(e, kAXSizeAttribute) else { fail("no frame for #\(args.count > 3 ? args[3] : "")") }
     var p = CGPoint.zero, s = CGSize.zero
     AXValueGetValue(pos as! AXValue, .cgPoint, &p)

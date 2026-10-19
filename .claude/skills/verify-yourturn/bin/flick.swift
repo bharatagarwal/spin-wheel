@@ -1,6 +1,3 @@
-// Real mouse flick across a wheel: flick <cx> <cy> <radius> <degrees> <seconds>
-// Presses at the top of the circle, drags clockwise (negative degrees: anticlockwise), releases.
-// Moves the user's actual pointer.
 import CoreGraphics
 import Foundation
 

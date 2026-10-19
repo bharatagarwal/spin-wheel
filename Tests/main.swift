@@ -1,12 +1,7 @@
 import Foundation
 
-// Headless check of the wheel physics: spin it many times per team size,
-// chi-square the landing slices against a uniform distribution, and report
-// how spins and the flapper behave.
-
 let spins = Int(CommandLine.arguments.dropFirst().first ?? "") ?? 3000
-// Critical chi-square values at p = 0.001, indexed by degrees of freedom.
-let critical: [Int: Double] = [1: 10.83, 2: 13.82, 3: 16.27, 4: 18.47, 5: 20.52, 6: 22.46, 7: 24.32, 9: 27.88, 11: 31.26]
+let chiSquareAtP001ByDegreesOfFreedom: [Int: Double] = [1: 10.83, 2: 13.82, 3: 16.27, 4: 18.47, 5: 20.52, 6: 22.46, 7: 24.32, 9: 27.88, 11: 31.26]
 var failed = false
 
 for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
@@ -16,20 +11,19 @@ for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
     for n in 0..<spins {
         let start = Double.random(in: 0..<(2 * .pi))
         var sim = WheelSim(slices: slices, theta: start)
-        // Half the spins go anticlockwise, as a flick can.
         sim.push(n % 2 == 0 ? spinVelocity() : -flickVelocity(spinVelocity()))
         while !sim.stopped { sim.advance(1.0 / 120) }
         counts[sim.winner] += 1
         durations.append(sim.time)
         turns.append(abs(sim.theta - start) / (2 * .pi))
-        swings.append(sim.peakSwing * 180 / .pi)
+        swings.append(sim.peakRoot * 180 / .pi)
         bends.append(sim.peakBend * 180 / .pi)
         tips.append(sim.peakTip * 180 / .pi)
         if sim.rolledBack { rollbacks += 1 }
     }
     let expected = Double(spins) / Double(slices)
     let chi = counts.reduce(0) { $0 + pow(Double($1) - expected, 2) / expected }
-    let limit = critical[slices - 1] ?? .infinity
+    let limit = chiSquareAtP001ByDegreesOfFreedom[slices - 1] ?? .infinity
     let ok = chi < limit
     failed = failed || !ok
     func p50(_ a: [Double]) -> Double { a.sorted()[a.count / 2] }

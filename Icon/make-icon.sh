@@ -1,5 +1,4 @@
 #!/bin/zsh
-# Regenerates Icon/AppIcon.icns from make-icon.swift.
 set -e
 cd "$(dirname "$0")"
 TMP=$(mktemp -d)

@@ -1,5 +1,4 @@
 #!/bin/zsh
-# Your Turn verification harness. Run `sw help` for commands.
 set -euo pipefail
 
 SKILL_DIR=${0:A:h:h}
@@ -84,7 +83,6 @@ spin)
     tail -1 $(artifacts)/spins.log
     ;;
 flick)
-    # sw flick [degrees] [seconds]: a real mouse drag around the wheel (moves the user's pointer!)
     need_up; local f=($($AX $(pid) frame wheel)) deg=${1:-90} secs=${2:-0.15}
     $HOME_DIR/bin/flick $(( f[1] + f[3] / 2 )) $(( f[2] + f[4] / 2 )) $(( f[3] * 35 / 100 )) $deg $secs
     ;;
@@ -103,7 +101,6 @@ shot)
     print $(artifacts)/$name.png
     ;;
 frames)
-    # sw frames <name> <count> <interval-seconds>: a timed series, e.g. during a spin
     need_up; local name=${1:-frame} count=${2:-6} interval=${3:-0.5} wid=$($AX $(pid) window-id)
     for i in {1..$count}; do screencapture -x -o -l $wid $(artifacts)/$name-$i.png; sleep $interval; done
     print $(artifacts)/$name-*.png

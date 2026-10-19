@@ -16,7 +16,6 @@ struct YourTurnApp: App {
     }
 }
 
-/// Synthesised once at launch; no audio files or system sounds.
 final class Sound {
     private let engine = AVAudioEngine()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
@@ -26,10 +25,8 @@ final class Sound {
     private var reveal: AVAudioPCMBuffer?
 
     init() {
-        // A few variants so fast ticks don't sound machine-gun identical.
         ticks = (0..<6).map { _ in makeTick() }
         reveal = makeChime()
-        // Round-robin voices so overlapping ticks don't queue behind each other.
         for _ in 0..<8 {
             let p = AVAudioPlayerNode()
             engine.attach(p)
@@ -44,8 +41,6 @@ final class Sound {
         }
     }
 
-    /// A peg strike. Loudness and brightness follow the real impact speed; `delay` keeps
-    /// strikes spaced as they happened inside the frame; a roll-back strike sounds duller.
     func tick(speed: Double, delay: Double, reverse: Bool) {
         guard let buffer = ticks.randomElement() else { return }
         let intensity = min(1, speed / 6)
@@ -77,8 +72,6 @@ final class Sound {
         return b
     }
 
-    // Flapper snapping off a peg: a ~2 ms strike exciting a few heavily damped modes,
-    // one low "knock" from the wheel's wooden body plus the flapper's own inharmonic ring.
     private func makeTick() -> AVAudioPCMBuffer {
         let jitter = { Double.random(in: 0.93...1.07) }
         let modes: [(freq: Double, decay: Double, gain: Double)] = [
@@ -108,7 +101,6 @@ final class Sound {
         return buffer(seconds: 0.06) { t in raw[min(raw.count - 1, Int(t * fs))] / peak }
     }
 
-    // Two soft bell notes (E5 then B5), each with a couple of inharmonic partials.
     private func makeChime() -> AVAudioPCMBuffer {
         func bell(_ f: Double, _ t: Double) -> Double {
             guard t >= 0 else { return 0 }
@@ -121,7 +113,6 @@ final class Sound {
     }
 }
 
-/// Calls back once per display refresh with the real elapsed time.
 final class Ticker: NSObject {
     private let callback: (Double) -> Void
     private var link: CADisplayLink?
@@ -155,8 +146,8 @@ final class Model: ObservableObject {
     }
     @Published var remaining: [String] = []
     @Published var done: [String] = []
-    @Published var rotation: Double = 0      // radians, clockwise
-    @Published var flapperRoot: Double = 0   // radians, 0 = hanging straight down
+    @Published var rotation: Double = 0
+    @Published var flapperRoot: Double = 0
     @Published var flapperTip: Double = 0
     @Published var focus: Double = 0
     @Published var spinning = false
@@ -165,17 +156,13 @@ final class Model: ObservableObject {
 
     private var sim: WheelSim?
     private var ticker: Ticker?
-    /// While a finger holds the wheel: where the wheel should be, and recent finger angles for the flick.
     private var dragTarget: Double?
     private var fingerAngle = 0.0
     private var fingerSamples: [(time: Date, angle: Double)] = []
     private let sound = Sound()
     private var spinStarted = Date()
-    /// Set YOURTURN_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
     private let verifyLog = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"]
 
-    /// The team list. Versions before the rename stored it under the old bundle id
-    /// `local.spinwheel`; copy it across once, leaving the old store untouched.
     private static func savedNames() -> String {
         let defaults = UserDefaults.standard
         if let names = defaults.string(forKey: "names") { return names }
@@ -195,8 +182,6 @@ final class Model: ObservableObject {
         sim?.push(spinVelocity())
     }
 
-    /// The finger is on the wheel at this angle (screen radians around the hub).
-    /// The first call grabs the wheel; later calls drag it round, flapper and all.
     func drag(to angle: Double) {
         if dragTarget == nil {
             guard start() else { return }
@@ -211,7 +196,6 @@ final class Model: ObservableObject {
         fingerSamples.removeAll { Date().timeIntervalSince($0.time) > 0.1 }
     }
 
-    /// Let go: the wheel leaves in the flick's direction at a spin-strength speed.
     func release() {
         guard dragTarget != nil else { return }
         dragTarget = nil
@@ -223,7 +207,6 @@ final class Model: ObservableObject {
         spinStarted = Date()
     }
 
-    /// Takes out the last winner and starts simulating; false if there's nothing to spin.
     private func start() -> Bool {
         guard !spinning, !remaining.isEmpty else { return false }
         if let w = winner { remaining.removeAll { $0 == w }; done.append(w); winner = nil }
@@ -240,14 +223,13 @@ final class Model: ObservableObject {
         guard var sim else { return }
         let dt = min(dt, 1.0 / 20)
         if let dragTarget { sim.drive((dragTarget - sim.theta) / max(dt, 1.0 / 240)) }
-        sim.advance(dt) { offset, speed, reverse in
-            sound.tick(speed: speed, delay: offset, reverse: reverse)
+        sim.advance(dt) { impact in
+            sound.tick(speed: impact.speed, delay: impact.offset, reverse: impact.reverse)
         }
         self.sim = sim
         rotation = sim.theta
         flapperRoot = sim.root
         flapperTip = sim.tip
-        // Close in on the wheel as it runs out of speed.
         if dragTarget == nil { focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4))) }
 
         guard sim.stopped else { return }
@@ -392,6 +374,7 @@ struct ContentView: View {
 }
 
 struct WheelAssembly: View {
+    private let hubDeadZone = 0.12
     let names: [String]
     let rotation: Double
     let flapperRoot: Double
@@ -417,8 +400,7 @@ struct WheelAssembly: View {
             .gesture(DragGesture(minimumDistance: 4)
                 .onChanged { v in
                     let x = v.location.x - g.size.width / 2, y = v.location.y - g.size.height / 2
-                    // Near the hub the angle is meaningless; ignore until the finger moves out.
-                    if x * x + y * y > pow(size * 0.12, 2) { onDrag(atan2(y, x)) }
+                    if x * x + y * y > pow(size * hubDeadZone, 2) { onDrag(atan2(y, x)) }
                 }
                 .onEnded { _ in onRelease() })
         }
@@ -458,8 +440,6 @@ struct Hub: View {
     }
 }
 
-/// Drawn from the same `Geometry` the simulation collides against: two
-/// segments that bend at the midpoint, tapering from the hinge to the tip.
 struct Flapper: View {
     let root: Double
     let tip: Double
@@ -522,7 +502,6 @@ struct WheelFace: View {
                 p.closeSubpath()
                 ctx.fill(p, with: .color(palette[i % palette.count]))
             }
-            // Curvature shading: lighter towards the hub, darker at the rim.
             ctx.fill(disc, with: .radialGradient(Gradient(colors: [.white.opacity(0.08), .clear, .black.opacity(0.18)]),
                                                  center: c, startRadius: 0, endRadius: r))
 

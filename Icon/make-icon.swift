@@ -1,4 +1,3 @@
-// Renders AppIcon.icns: ./Icon/make-icon.sh
 import AppKit
 
 let palette: [NSColor] = [
@@ -32,7 +31,6 @@ func render(_ px: Int) -> NSBitmapImageRep {
     let c = CGPoint(x: 512, y: 494)
     let outer: CGFloat = 330, face: CGFloat = 307
 
-    // Steel rim with a drop shadow.
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -14), blur: 30, color: NSColor.black.withAlphaComponent(0.6).cgColor)
     ctx.addEllipse(in: CGRect(x: c.x - outer, y: c.y - outer, width: outer * 2, height: outer * 2))
@@ -46,7 +44,6 @@ func render(_ px: Int) -> NSBitmapImageRep {
     ctx.drawLinearGradient(steel, start: CGPoint(x: c.x - outer, y: c.y + outer), end: CGPoint(x: c.x + outer, y: c.y - outer), options: [])
     ctx.restoreGState()
 
-    // Slices, rotated a little so a boundary isn't dead centre under the flapper.
     let n = palette.count
     let seg = 2 * CGFloat.pi / CGFloat(n)
     let turn: CGFloat = 0.21
@@ -81,7 +78,6 @@ func render(_ px: Int) -> NSBitmapImageRep {
 
     drawBall(ctx, c, 46, shadow: 12)
 
-    // Flapper hanging straight down from the rim.
     let pivot = CGPoint(x: c.x, y: c.y + outer - 6)
     ctx.saveGState()
     ctx.translateBy(x: pivot.x, y: pivot.y)
@@ -102,7 +98,6 @@ func render(_ px: Int) -> NSBitmapImageRep {
     return rep
 }
 
-/// A polished silver sphere: pegs, hub and the flapper pivot.
 func drawBall(_ ctx: CGContext, _ p: CGPoint, _ r: CGFloat, shadow: CGFloat) {
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -shadow / 2), blur: shadow, color: NSColor.black.withAlphaComponent(0.5).cgColor)
