@@ -140,138 +140,226 @@ final class Ticker: NSObject {
 
 let palette: [Color] = [.red, .orange, .yellow, .green, .mint, .teal, .blue, .indigo, .purple, .pink, .brown, .cyan]
 
-final class Model: ObservableObject {
-    @Published var namesRaw = Model.savedNames() {
-        didSet { UserDefaults.standard.set(namesRaw, forKey: "names") }
-    }
-    @Published var remaining: [String] = []
-    @Published var done: [String] = []
-    @Published var clockwiseRotation: Double = 0
-    @Published var flapperRootFromVertical: Double = 0
-    @Published var flapperTipFromVertical: Double = 0
-    @Published var focus: Double = 0
-    @Published var spinning = false
-    @Published var winner: String?
-    @Published var newName = ""
+struct Team {
+    private(set) var names: [String]
 
-    private var sim: WheelSim?
-    private var ticker: Ticker?
-    private var dragTarget: Double?
-    private var fingerAngle = 0.0
-    private var fingerSamples: [(time: Date, angle: Double)] = []
-    private let sound = Sound()
-    private var spinStarted = Date()
-    private let verifyLog = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"]
-
-    private static func savedNames() -> String {
+    static func load() -> Team {
         let defaults = UserDefaults.standard
-        if let names = defaults.string(forKey: "names") { return names }
-        if let legacy = UserDefaults(suiteName: "local.spinwheel")?.string(forKey: "names") {
-            defaults.set(legacy, forKey: "names")
-            return legacy
-        }
-        return "Alice\nBob\nCharlie\nDana"
+        let saved = defaults.string(forKey: "names")
+            ?? UserDefaults(suiteName: "local.spinwheel")?.string(forKey: "names")
+            ?? "Alice\nBob\nCharlie\nDana"
+        let team = Team(names: saved.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        team.save()
+        return team
     }
 
-    var names: [String] {
-        namesRaw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    func save() {
+        UserDefaults.standard.set(names.joined(separator: "\n"), forKey: "names")
     }
 
-    func spin() {
-        guard start() else { return }
-        sim?.push(spinVelocity())
-    }
-
-    func drag(to angle: Double) {
-        if dragTarget == nil {
-            guard start() else { return }
-            dragTarget = clockwiseRotation
-            fingerAngle = angle
-            fingerSamples = []
-        }
-        let delta = remainder(angle - fingerAngle, 2 * .pi)
-        fingerAngle += delta
-        dragTarget? += delta
-        fingerSamples.append((Date(), fingerAngle))
-        fingerSamples.removeAll { Date().timeIntervalSince($0.time) > 0.1 }
-    }
-
-    func release() {
-        guard dragTarget != nil else { return }
-        dragTarget = nil
-        var flick = 0.0
-        if let first = fingerSamples.first, let last = fingerSamples.last, last.time > first.time {
-            flick = (last.angle - first.angle) / last.time.timeIntervalSince(first.time)
-        }
-        sim?.push(flickVelocity(flick))
-        spinStarted = Date()
-    }
-
-    private func start() -> Bool {
-        guard !spinning, !remaining.isEmpty else { return false }
-        if let w = winner { remaining.removeAll { $0 == w }; done.append(w); winner = nil }
-        guard !remaining.isEmpty else { return false }
-        spinning = true
-        sim = WheelSim(slices: remaining.count, clockwiseAngle: clockwiseRotation)
-        spinStarted = Date()
-        ticker?.stop()
-        ticker = Ticker { [weak self] dt in self?.frame(dt) }
+    mutating func add(_ name: String) -> Bool {
+        guard !name.isEmpty, !names.contains(name) else { return false }
+        names.append(name)
         return true
     }
 
-    private func frame(_ dt: Double) {
-        guard var sim else { return }
-        let dt = min(dt, 1.0 / 20)
-        if let dragTarget { sim.drive((dragTarget - sim.clockwiseAngle) / max(dt, 1.0 / 240)) }
-        sim.advance(dt) { impact in
-            sound.tick(speed: impact.speed, delay: impact.offset, reverse: impact.reverse)
-        }
-        self.sim = sim
-        clockwiseRotation = sim.clockwiseAngle
-        flapperRootFromVertical = sim.rootFromVertical
-        flapperTipFromVertical = sim.tipFromVertical
-        if dragTarget == nil { focus = max(focus, min(1, max(0, (5 - abs(sim.clockwiseSpeed)) / 4))) }
+    mutating func remove(_ name: String) {
+        names.removeAll { $0 == name }
+    }
+}
 
+struct TurnOrder {
+    private(set) var order: [String] = []
+    private(set) var done: Set<String> = []
+    private(set) var winner: String?
+    private(set) var wheel: [String] = []
+
+    init(shuffling names: [String] = []) {
+        order = names.shuffled()
+        wheel = order
+    }
+
+    var waiting: [String] { order.filter { !done.contains($0) } }
+
+    mutating func add(_ name: String, toWheel: Bool) {
+        order.append(name)
+        if toWheel { wheel.append(name) }
+    }
+
+    mutating func remove(_ name: String) {
+        order.removeAll { $0 == name }
+        wheel.removeAll { $0 == name }
+        done.remove(name)
+        if winner == name { winner = nil }
+    }
+
+    mutating func beginSpin() -> [String] {
+        winner = nil
+        wheel = waiting
+        return wheel
+    }
+
+    mutating func pick(_ name: String) {
+        winner = name
+        done.insert(name)
+    }
+}
+
+struct WheelPose {
+    var clockwiseAngle = 0.0
+    var rootFromVertical = 0.0
+    var tipFromVertical = 0.0
+}
+
+final class SpinSession {
+    let slices: [String]
+    private(set) var released = Date()
+    private var sim: WheelSim
+    private var ticker: Ticker?
+    private var grip: (target: Double, fingerAngle: Double, samples: [(time: Date, angle: Double)])?
+    private let onFrame: (WheelSim, _ held: Bool) -> Void
+    private let onImpact: (WheelSim.Impact) -> Void
+    private let onStop: (WheelSim) -> Void
+
+    init(slices: [String], clockwiseAngle: Double,
+         onFrame: @escaping (WheelSim, _ held: Bool) -> Void,
+         onImpact: @escaping (WheelSim.Impact) -> Void,
+         onStop: @escaping (WheelSim) -> Void) {
+        self.slices = slices
+        self.sim = WheelSim(slices: slices.count, clockwiseAngle: clockwiseAngle)
+        self.onFrame = onFrame
+        self.onImpact = onImpact
+        self.onStop = onStop
+        ticker = Ticker { [weak self] dt in self?.frame(dt) }
+    }
+
+    func push(_ clockwiseSpeed: Double) {
+        sim.push(clockwiseSpeed)
+        released = Date()
+    }
+
+    func grab(at angle: Double) {
+        grip = (sim.clockwiseAngle, angle, [])
+    }
+
+    func drag(to angle: Double, at time: Date) {
+        guard var g = grip else { return }
+        let delta = remainder(angle - g.fingerAngle, 2 * .pi)
+        g.fingerAngle += delta
+        g.target += delta
+        g.samples.append((time, g.fingerAngle))
+        g.samples.removeAll { time.timeIntervalSince($0.time) > 0.1 }
+        grip = g
+    }
+
+    func release(using rng: inout some RandomNumberGenerator) {
+        guard let g = grip else { return }
+        grip = nil
+        var flick = 0.0
+        if let first = g.samples.first, let last = g.samples.last, last.time > first.time {
+            flick = (last.angle - first.angle) / last.time.timeIntervalSince(first.time)
+        }
+        push(flickVelocity(flick, using: &rng))
+    }
+
+    private func frame(_ dt: Double) {
+        let dt = min(dt, 1.0 / 20)
+        if let grip { sim.drive((grip.target - sim.clockwiseAngle) / max(dt, 1.0 / 240)) }
+        sim.advance(dt, onImpact: onImpact)
+        onFrame(sim, grip != nil)
         guard sim.stopped else { return }
         ticker?.stop()
         ticker = nil
-        self.sim = nil
-        let index = sim.winner
+        onStop(sim)
+    }
+}
+
+struct SpinLog {
+    let path: String
+
+    func record(_ session: SpinSession, winner: String, simTime: Double) {
+        let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", session.slices.count, winner, simTime, Date().timeIntervalSince(session.released))
+        if let h = FileHandle(forWritingAtPath: path) ?? (FileManager.default.createFile(atPath: path, contents: nil) ? FileHandle(forWritingAtPath: path) : nil) {
+            h.seekToEndOfFile()
+            h.write(line.data(using: .utf8)!)
+            try? h.close()
+        }
+    }
+}
+
+final class Model: ObservableObject {
+    @Published private(set) var team = Team.load() {
+        didSet { team.save() }
+    }
+    @Published private(set) var turns = TurnOrder()
+    @Published private(set) var pose = WheelPose()
+    @Published private(set) var session: SpinSession?
+    @Published var focus: Double = 0
+    @Published var newName = ""
+
+    private let sound = Sound()
+    private let log = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"].map(SpinLog.init)
+    private var rng = SystemRandomNumberGenerator()
+
+    var spinning: Bool { session != nil }
+
+    func spin() {
+        guard begin() else { return }
+        session?.push(spinVelocity(using: &rng))
+    }
+
+    func drag(to angle: Double, at time: Date) {
+        if session == nil, begin() { session?.grab(at: angle) }
+        session?.drag(to: angle, at: time)
+    }
+
+    func release() {
+        session?.release(using: &rng)
+    }
+
+    private func begin() -> Bool {
+        guard session == nil, !turns.waiting.isEmpty else { return false }
+        session = SpinSession(
+            slices: turns.beginSpin(), clockwiseAngle: pose.clockwiseAngle,
+            onFrame: { [weak self] sim, held in self?.show(sim, held: held) },
+            onImpact: { [sound] impact in sound.tick(speed: impact.speed, delay: impact.offset, reverse: impact.reverse) },
+            onStop: { [weak self] sim in self?.finish(sim) })
+        return true
+    }
+
+    private func show(_ sim: WheelSim, held: Bool) {
+        pose = WheelPose(clockwiseAngle: sim.clockwiseAngle, rootFromVertical: sim.rootFromVertical, tipFromVertical: sim.tipFromVertical)
+        if !held { focus = max(focus, min(1, max(0, (5 - abs(sim.clockwiseSpeed)) / 4))) }
+    }
+
+    private func finish(_ sim: WheelSim) {
+        guard let session else { return }
+        let name = session.slices[sim.winner]
         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-            winner = remaining[index]
-            spinning = false
+            turns.pick(name)
+            self.session = nil
         }
         sound.chime()
-        if let verifyLog {
-            let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", remaining.count, remaining[index], sim.time, Date().timeIntervalSince(spinStarted))
-            if let h = FileHandle(forWritingAtPath: verifyLog) ?? (FileManager.default.createFile(atPath: verifyLog, contents: nil) ? FileHandle(forWritingAtPath: verifyLog) : nil) {
-                h.seekToEndOfFile()
-                h.write(line.data(using: .utf8)!)
-                try? h.close()
-            }
-        }
+        log?.record(session, winner: name, simTime: sim.time)
         withAnimation(.easeOut(duration: 0.8).delay(0.6)) { focus = 0 }
     }
 
     func reset() {
         guard !spinning else { return }
-        remaining = names.shuffled()
-        done = []
-        winner = nil
+        turns = TurnOrder(shuffling: team.names)
     }
 
     func add() {
-        let n = newName.trimmingCharacters(in: .whitespaces)
-        guard !n.isEmpty, !names.contains(n) else { return }
-        namesRaw = (names + [n]).joined(separator: "\n")
-        if !spinning { remaining.append(n) }
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        guard team.add(name) else { return }
+        turns.add(name, toWheel: !spinning)
         newName = ""
     }
 
     func remove(_ name: String) {
-        namesRaw = names.filter { $0 != name }.joined(separator: "\n")
-        if !spinning { remaining.removeAll { $0 == name } }
-        if winner == name { winner = nil }
+        guard !spinning else { return }
+        team.remove(name)
+        turns.remove(name)
     }
 }
 
@@ -286,21 +374,21 @@ struct ContentView: View {
 
             HStack(spacing: 20) {
                 VStack(spacing: 28) {
-                    WheelAssembly(names: m.remaining, clockwiseRotation: m.clockwiseRotation, flapperRootFromVertical: m.flapperRootFromVertical, flapperTipFromVertical: m.flapperTipFromVertical,
-                                  onDrag: m.drag(to:), onRelease: m.release)
+                    WheelAssembly(names: m.turns.wheel, pose: m.pose,
+                                  onDrag: m.drag(to:at:), onRelease: m.release)
                         .accessibilityElement()
                         .accessibilityIdentifier("wheel")
                         .accessibilityValue(m.spinning ? "spinning" : "idle")
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction { m.spin() }
                         .overlay {
-                            Text(m.winner ?? " ")
+                            Text(m.turns.winner ?? " ")
                                 .font(.system(size: 40, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 32).padding(.vertical, 14)
                                 .glassEffect(.regular, in: .capsule)
-                                .opacity(m.winner == nil ? 0 : 1)
-                                .scaleEffect(m.winner == nil ? 0.3 : 1)
+                                .opacity(m.turns.winner == nil ? 0 : 1)
+                                .scaleEffect(m.turns.winner == nil ? 0.3 : 1)
                                 .accessibilityIdentifier("winner")
                         }
                         .scaleEffect(1 + 0.06 * m.focus)
@@ -311,7 +399,7 @@ struct ContentView: View {
                         HStack(spacing: 12) {
                             Button("Spin") { m.spin() }
                                 .keyboardShortcut(.space, modifiers: [])
-                                .disabled(m.spinning || m.remaining.isEmpty)
+                                .disabled(m.spinning || m.turns.waiting.isEmpty)
                                 .buttonStyle(.glassProminent)
                                 .accessibilityIdentifier("spin")
                             Button("Reset") { m.reset() }
@@ -328,16 +416,17 @@ struct ContentView: View {
                     Text("Team").font(.title3.bold())
                     ScrollView {
                         VStack(spacing: 6) {
-                            ForEach(m.names, id: \.self) { name in
+                            ForEach(m.team.names, id: \.self) { name in
                                 HStack {
                                     Text(name)
-                                        .strikethrough(m.done.contains(name))
-                                        .opacity(m.done.contains(name) ? 0.5 : 1)
+                                        .strikethrough(m.turns.done.contains(name))
+                                        .opacity(m.turns.done.contains(name) ? 0.5 : 1)
                                         .accessibilityIdentifier("member-\(name)")
-                                        .accessibilityValue(m.done.contains(name) ? "done" : "waiting")
+                                        .accessibilityValue(m.turns.done.contains(name) ? "done" : "waiting")
                                     Spacer()
                                     Button { m.remove(name) } label: { Image(systemName: "xmark") }
                                         .buttonStyle(.borderless)
+                                        .disabled(m.spinning)
                                         .accessibilityIdentifier("remove-\(name)")
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -376,10 +465,8 @@ struct ContentView: View {
 struct WheelAssembly: View {
     private let hubDeadZone = 0.12
     let names: [String]
-    let clockwiseRotation: Double
-    let flapperRootFromVertical: Double
-    let flapperTipFromVertical: Double
-    var onDrag: (Double) -> Void = { _ in }
+    let pose: WheelPose
+    var onDrag: (Double, Date) -> Void = { _, _ in }
     var onRelease: () -> Void = {}
 
     var body: some View {
@@ -391,16 +478,16 @@ struct WheelAssembly: View {
                 Rim(rimWidth: rim)
                 WheelFace(names: names)
                     .frame(width: face, height: face)
-                    .rotationEffect(.radians(clockwiseRotation))
+                    .rotationEffect(.radians(pose.clockwiseAngle))
                 Hub(size: size * 0.1)
-                Flapper(rootFromVertical: flapperRootFromVertical, tipFromVertical: flapperTipFromVertical, faceRadius: face / 2)
+                Flapper(pose: pose, faceRadius: face / 2)
             }
             .frame(width: size, height: size)
             .position(x: g.size.width / 2, y: g.size.height / 2)
             .gesture(DragGesture(minimumDistance: 4)
                 .onChanged { v in
                     let x = v.location.x - g.size.width / 2, y = v.location.y - g.size.height / 2
-                    if x * x + y * y > pow(size * hubDeadZone, 2) { onDrag(atan2(y, x)) }
+                    if x * x + y * y > pow(size * hubDeadZone, 2) { onDrag(atan2(y, x), v.time) }
                 }
                 .onEnded { _ in onRelease() })
         }
@@ -441,18 +528,20 @@ struct Hub: View {
 }
 
 struct Flapper: View {
-    let rootFromVertical: Double
-    let tipFromVertical: Double
+    let pose: WheelPose
     let faceRadius: CGFloat
 
     var body: some View {
         Canvas { ctx, size in
             let r = faceRadius
-            let segmentLength = WheelRadii.segmentLength * r
-            let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - WheelRadii.pivot * r)
-            let rootDir = CGVector(dx: -sin(rootFromVertical), dy: cos(rootFromVertical)), tipDir = CGVector(dx: -sin(tipFromVertical), dy: cos(tipFromVertical))
-            let joint = CGPoint(x: pivot.x + rootDir.dx * segmentLength, y: pivot.y + rootDir.dy * segmentLength)
-            let end = CGPoint(x: joint.x + tipDir.dx * segmentLength, y: joint.y + tipDir.dy * segmentLength)
+            let points = WheelRadii.flapper(rootFromVertical: pose.rootFromVertical, tipFromVertical: pose.tipFromVertical)
+            func onScreen(_ p: YDownPoint) -> CGPoint { CGPoint(x: size.width / 2 + p.x * r, y: size.height / 2 + p.y * r) }
+            let pivot = onScreen(points.pivot), joint = onScreen(points.joint), end = onScreen(points.tip)
+            func direction(_ a: CGPoint, _ b: CGPoint) -> CGVector {
+                let length = hypot(b.x - a.x, b.y - a.y)
+                return CGVector(dx: (b.x - a.x) / length, dy: (b.y - a.y) / length)
+            }
+            let rootDir = direction(pivot, joint), tipDir = direction(joint, end)
             let tipW = WheelRadii.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
             func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
             let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
@@ -461,7 +550,7 @@ struct Flapper: View {
             p.move(to: side(pivot, rootDir, rootW))
             p.addLine(to: side(joint, jointDir, midW))
             p.addLine(to: side(end, tipDir, tipW))
-            p.addArc(center: end, radius: tipW, startAngle: .radians(tipFromVertical + .pi), endAngle: .radians(tipFromVertical), clockwise: true)
+            p.addArc(center: end, radius: tipW, startAngle: .radians(pose.tipFromVertical + .pi), endAngle: .radians(pose.tipFromVertical), clockwise: true)
             p.addLine(to: side(joint, jointDir, -midW))
             p.addLine(to: side(pivot, rootDir, -rootW))
             p.closeSubpath()
@@ -494,11 +583,10 @@ struct WheelFace: View {
                 ctx.fill(disc, with: .color(Color(white: 0.2)))
                 return
             }
-            let seg = 360.0 / Double(names.count)
             for i in names.indices {
                 var p = Path()
                 p.move(to: c)
-                p.addArc(center: c, radius: r, startAngle: .degrees(Double(i) * seg), endAngle: .degrees(Double(i + 1) * seg), clockwise: false)
+                p.addArc(center: c, radius: r, startAngle: .radians(WheelRadii.sliceAngle(i, of: names.count)), endAngle: .radians(WheelRadii.sliceAngle(i + 1, of: names.count)), clockwise: false)
                 p.closeSubpath()
                 ctx.fill(p, with: .color(palette[i % palette.count]))
             }
@@ -508,7 +596,7 @@ struct WheelFace: View {
             for (i, name) in names.enumerated() {
                 var t = ctx
                 t.translateBy(x: c.x, y: c.y)
-                t.rotate(by: .degrees((Double(i) + 0.5) * seg))
+                t.rotate(by: .radians((WheelRadii.sliceAngle(i, of: names.count) + WheelRadii.sliceAngle(i + 1, of: names.count)) / 2))
                 let fontSize = min(24, max(11, r / CGFloat(max(names.count, 4)) * 0.9))
                 let text = Text(name).font(.system(size: fontSize, weight: .heavy, design: .rounded)).foregroundColor(.white)
                 t.drawLayer { l in
@@ -518,14 +606,15 @@ struct WheelFace: View {
             }
 
             for i in 0..<names.count {
-                let a = Double(i) * seg * .pi / 180
+                let a = WheelRadii.sliceAngle(i, of: names.count)
                 var line = Path()
                 line.move(to: c)
                 line.addLine(to: CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r))
                 ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
 
                 let pegR = r * WheelRadii.pegRadius
-                let pc = CGPoint(x: c.x + cos(a) * r * WheelRadii.pegCircle, y: c.y + sin(a) * r * WheelRadii.pegCircle)
+                let peg = WheelRadii.peg(i, of: names.count)
+                let pc = CGPoint(x: c.x + peg.x * r, y: c.y + peg.y * r)
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR + 1, y: pc.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR, y: pc.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
                     Gradient(colors: [.white, Color(white: 0.6)]),
