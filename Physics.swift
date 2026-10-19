@@ -7,7 +7,7 @@ enum Geometry {
     static let pegCircle = 0.93      // distance of peg centres from the hub
     static let pegRadius = 0.016
     static let pivot = 1.06          // flapper hinge, mounted on the rim above the hub
-    static let armLength = 0.16
+    static let armLength = 0.127
     static let armRadius = 0.010     // half-thickness of the flapper near its tip
 }
 
@@ -21,8 +21,8 @@ struct WheelSim {
         var viscousDrag = 0.013
         var airDrag = 0.00065             // grows with speed squared
         var flapperInertia = 0.0007
-        var flapperStiffness = 1.3      // torsional spring, torque per radian
-        var flapperDampingRatio = 0.12
+        var flapperStiffness = 2.6      // torsional spring, torque per radian
+        var flapperDampingRatio = 0.2
         var contactStiffness = 3e5      // Hertzian: force = k * depth^1.5
         var contactDamping = 0.6       // Hunt–Crossley, sets how dead the knock is
         var contactFriction = 0.15
