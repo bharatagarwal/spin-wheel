@@ -1,4 +1,4 @@
-// Accessibility driver for the Spin Wheel verification instance.
+// Accessibility driver for the Your Turn verification instance.
 // Usage: ax <pid> tree | press <id> | get <id> | set <id> <text> | wait <id> <value> [seconds] | window-id
 import AppKit
 import ApplicationServices

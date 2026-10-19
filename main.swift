@@ -3,9 +3,9 @@ import AVFoundation
 import QuartzCore
 
 @main
-struct SpinWheelApp: App {
+struct YourTurnApp: App {
     var body: some Scene {
-        WindowGroup("Standup Wheel") {
+        WindowGroup("Your Turn") {
             ContentView()
                 .frame(minWidth: 820, minHeight: 600)
                 .preferredColorScheme(.dark)
@@ -166,8 +166,8 @@ final class Model: ObservableObject {
     private var ticker: Ticker?
     private let sound = Sound()
     private var spinStarted = Date()
-    /// Set SPINWHEEL_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
-    private let verifyLog = ProcessInfo.processInfo.environment["SPINWHEEL_VERIFY_LOG"]
+    /// Set YOURTURN_VERIFY_LOG=<path> to append one line per finished spin (used by verification).
+    private let verifyLog = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"]
 
     var names: [String] {
         namesRaw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

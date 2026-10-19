@@ -22,7 +22,7 @@ Preconditions: fresh `sw launch` (Alice, Bob, Charlie, Dana, Eve).
 - **Reject duplicate.** `$SW add Frank` again. `$SW names` still lists Frank once.
 - **Reject blank.** `$SW add " "`. `$SW names` is unchanged.
 - **Remove.** `$SW press remove-Bob`. `$SW get member-Bob` fails (no element); `$SW names` has no Bob; `$SW shot removed` shows five slices without Bob.
-- **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `.verify/SpinWheelVerify.app/Contents/MacOS/SpinWheel &`, write its PID into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
+- **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `open -n .verify/YourTurnVerify.app`, write `pgrep -n -f YourTurnVerify.app/Contents/MacOS/YourTurn` into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
 - **Proof.** `added.png`, `removed.png`, and the `sw names` output before and after relaunch.
 
 ## Gotchas

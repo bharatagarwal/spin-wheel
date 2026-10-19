@@ -1,6 +1,6 @@
-# Spin Wheel verification map
+# Your Turn verification map
 
-The maintained list of user-facing journeys in Spin Wheel and how to prove each one with `bin/sw`. Read this index, then follow the matching feature file. When a journey fails because the app changed rather than broke, update its file in the same change.
+The maintained list of user-facing journeys in Your Turn and how to prove each one with `bin/sw`. Read this index, then follow the matching feature file. When a journey fails because the app changed rather than broke, update its file in the same change.
 
 | Feature | File | Entry points |
 |---|---|---|
@@ -11,9 +11,9 @@ The maintained list of user-facing journeys in Spin Wheel and how to prove each 
 
 ## Baseline preconditions
 
-- `SW=.claude/skills/verify-spinwheel/bin/sw`, run from the repo root.
+- `SW=.claude/skills/verify-yourturn/bin/sw`, run from the repo root.
 - `$SW build` after the last source change, then `$SW launch` (team Alice, Bob, Charlie, Dana, Eve), then `$SW doctor` all `ok`.
-- One verification instance at a time; never drive the user's `/Applications/SpinWheel.app`.
+- One verification instance at a time; never drive the user's `/Applications/Your Turn.app`.
 
 ## Driving conventions
 
