@@ -38,6 +38,6 @@ Preconditions: fresh `sw launch`, `sw doctor` all `ok`.
 - `#winner` is missing from the AX tree while no winner is shown (it has zero opacity). `sw get winner` fails until the first spin ends.
 - SwiftUI exposes `#wheel`'s value as `AXValueDescription`; `bin/ax` reads it, but other tools reading `AXValue` see an empty string.
 - Space: on launch the app clears focus from the Add name field so Space reaches Spin. Proving `spin-space` needs a real keystroke into a frontmost window (`osascript -e 'tell application "System Events" to key code 49'` after bringing our PID to the front). That steals focus from the user, so only do it when the change touches keyboard handling, and warn the user first.
-- `sw flick` posts real mouse events through the user's pointer, so warn the user first. It needs the verify window frontmost and unobscured, and does nothing while the screen is locked (`loginwindow` frontmost). The installed `/Applications/Your Turn.app` shares the process name `YourTurn`, so check by PID, not name.
+- `sw flick` posts real mouse events through the user's pointer, so warn the user first. It needs the verify window frontmost and unobscured, and does nothing while the screen is locked (`loginwindow` frontmost). The installed `/Applications/Hot Potato.app` shares the process name `HotPotato`, so check by PID, not name.
 - The zoom and dim are still fading out for about 1.4 s after the banner appears; shots taken immediately show them.
 - Sound (peg ticks, chime) cannot be verified from here.

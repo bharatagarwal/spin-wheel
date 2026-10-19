@@ -1,25 +1,25 @@
 ---
-name: verify-yourturn
-description: Launch and drive the Your Turn macOS app (SwiftUI standup picker in this repo) through the accessibility API to prove behaviour - spinning and picking a winner, editing the team list, Reset - with screenshots and a per-spin log as evidence. Use whenever you change main.swift or Physics.swift and need to confirm the change in the real app, or when asked to run, screenshot or verify the app.
+name: verify-hotpotato
+description: Launch and drive the Hot Potato macOS app (SwiftUI standup picker in this repo) through the accessibility API to prove behaviour - spinning and picking a winner, editing the team list, Reset - with screenshots and a per-spin log as evidence. Use whenever you change main.swift or Physics.swift and need to confirm the change in the real app, or when asked to run, screenshot or verify the app.
 ---
 
-# Verify Your Turn
+# Verify Hot Potato
 
-Your Turn is a single-window SwiftUI macOS app (`main.swift`, `Physics.swift`, built by `./build.sh` into `YourTurn.app`). There is no server, no CLI surface and no web UI: the user touches one window. You drive it with `bin/sw`, which builds an isolated copy of the app, launches it, and presses controls by **accessibility identifier** through a small AX tool (`bin/ax.swift`, compiled by `sw build`).
+Hot Potato is a single-window SwiftUI macOS app (`main.swift`, `Physics.swift`, built by `./build.sh` into `HotPotato.app`). There is no server, no CLI surface and no web UI: the user touches one window. You drive it with `bin/sw`, which builds an isolated copy of the app, launches it, and presses controls by **accessibility identifier** through a small AX tool (`bin/ax.swift`, compiled by `sw build`).
 
-All commands below run from the repo root. `sw` is `.claude/skills/verify-yourturn/bin/sw`:
+All commands below run from the repo root. `sw` is `.claude/skills/verify-hotpotato/bin/sw`:
 
 ```sh
-SW=.claude/skills/verify-yourturn/bin/sw
+SW=.claude/skills/verify-hotpotato/bin/sw
 ```
 
 The feature map in `features/` is the maintained list of user journeys. Read `features/README.md` before proving a change, and drive every entry point the relevant feature file lists.
 
 ## Isolation: what makes this safe
 
-- `sw build` copies the app to `.verify/YourTurnVerify.app` with bundle id `local.yourturn.verify`, so it has its **own UserDefaults**. The user's real team list lives under `local.yourturn` and is never written. (If a domain has no `names`, the app copies them once from the pre-rename domain `local.spinwheel`; `sw launch` always seeds `names`, so the verify copy never does this.)
+- `sw build` copies the app to `.verify/HotPotatoVerify.app` with bundle id `local.hotpotato.verify`, so it has its **own UserDefaults**. The user's real team list lives under `local.hotpotato` and is never written. (If a domain has no `names`, the app copies them once from the first pre-rename domain that has them, `local.yourturn` then `local.spinwheel`; `sw launch` always seeds `names`, so the verify copy never does this.)
 - Driving is by AX actions on our own PID, not keystrokes or clicks, so it does not need the window to be frontmost and does not type into whatever the user has focused. It can run alongside the user's own copy of the app.
-- Only one verification instance at a time: `sw launch` refuses if one is already running. Do not drive the user's `/Applications/Your Turn.app` or a copy you did not launch.
+- Only one verification instance at a time: `sw launch` refuses if one is already running. Do not drive the user's `/Applications/Hot Potato.app` or a copy you did not launch.
 
 ## Launch
 
@@ -29,7 +29,7 @@ $SW launch                         # team: Alice Bob Charlie Dana Eve
 $SW launch Ana Ben Cy              # or any team, one argument per name
 ```
 
-`launch` resets the verify domain, seeds `names`, starts the app through `open -n` (LaunchServices; running the binary directly can leave it without a window) with `YOURTURN_VERIFY_LOG` pointing at the run's artifact dir, and waits until the `#spin` button is reachable over AX. Ready output:
+`launch` resets the verify domain, seeds `names`, starts the app through `open -n` (LaunchServices; running the binary directly can leave it without a window) with `HOTPOTATO_VERIFY_LOG` pointing at the run's artifact dir, and waits until the `#spin` button is reachable over AX. Ready output:
 
 ```
 ready pid=68166 run=20261019-161558 artifacts=/…/spin-wheel/.verify/artifacts/20261019-161558
@@ -45,7 +45,7 @@ Run first, and again whenever anything looks off:
 $SW doctor
 ```
 
-All lines must read `ok`: instance running, process is our verify build, bundle id `local.yourturn.verify`, build newer than `main.swift` and `Physics.swift`, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
+All lines must read `ok`: instance running, process is our verify build, bundle id `local.hotpotato.verify`, build newer than `main.swift` and `Physics.swift`, `#spin` reachable over AX, window on screen. It also prints the seeded names and the artifact dir. If AX fails with "accessibility permission missing", the terminal running you needs Accessibility permission in System Settings → Privacy & Security; ask the user, you cannot grant it.
 
 ## Drive
 
@@ -96,7 +96,7 @@ Proof standards:
 $SW stop
 ```
 
-Kills only the PID that `sw launch` recorded, deletes the `local.yourturn.verify` defaults, and removes `.verify/state/`. It keeps `.verify/artifacts/` and `.verify/YourTurnVerify.app` (rebuilt by the next `sw build`). Run it after every attempt, including failed ones, before launching again. Never `pkill YourTurn`: that would also kill the user's own copy.
+Kills only the PID that `sw launch` recorded, deletes the `local.hotpotato.verify` defaults, and removes `.verify/state/`. It keeps `.verify/artifacts/` and `.verify/HotPotatoVerify.app` (rebuilt by the next `sw build`). Run it after every attempt, including failed ones, before launching again. Never `pkill HotPotato`: that would also kill the user's own copy.
 
 ## Helpers
 

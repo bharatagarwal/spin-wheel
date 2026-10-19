@@ -3,9 +3,9 @@ import AVFoundation
 import QuartzCore
 
 @main
-struct YourTurnApp: App {
+struct HotPotatoApp: App {
     var body: some Scene {
-        WindowGroup("Your Turn") {
+        WindowGroup("Hot Potato") {
             ContentView()
                 .frame(minWidth: 820, minHeight: 600)
                 .preferredColorScheme(.dark)
@@ -145,8 +145,9 @@ struct Team {
 
     static func load() -> Team {
         let defaults = UserDefaults.standard
+        let previousAppIDs = ["local.yourturn", "local.spinwheel"]
         let saved = defaults.string(forKey: "names")
-            ?? UserDefaults(suiteName: "local.spinwheel")?.string(forKey: "names")
+            ?? previousAppIDs.lazy.compactMap { UserDefaults(suiteName: $0)?.string(forKey: "names") }.first
             ?? "Alice\nBob\nCharlie\nDana"
         let team = Team(names: saved.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
         team.save()
@@ -326,7 +327,7 @@ final class Model: ObservableObject {
     @Published var newName = ""
 
     private let sound = Sound()
-    private let log = ProcessInfo.processInfo.environment["YOURTURN_VERIFY_LOG"].map(SpinLog.init)
+    private let log = ProcessInfo.processInfo.environment["HOTPOTATO_VERIFY_LOG"].map(SpinLog.init)
     private var rng = SystemRandomNumberGenerator()
 
     var spinning: Bool {

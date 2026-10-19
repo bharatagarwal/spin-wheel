@@ -23,7 +23,7 @@ Preconditions: fresh `sw launch` (Alice, Bob, Charlie, Dana, Eve).
 - **Reject duplicate.** `$SW add Frank` again. `$SW names` still lists Frank once.
 - **Reject blank.** `$SW add " "`. `$SW names` is unchanged.
 - **Remove.** `$SW press remove-Bob`. `$SW get member-Bob` fails (no element); `$SW names` has no Bob; `$SW shot removed` shows five slices without Bob.
-- **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `open -n .verify/YourTurnVerify.app`, write `pgrep -n -f YourTurnVerify.app/Contents/MacOS/YourTurn` into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
+- **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `open -n .verify/HotPotatoVerify.app`, write `pgrep -n -f HotPotatoVerify.app/Contents/MacOS/HotPotato` into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
 - **Add mid-spin.** `$SW press spin`, then within a second `$SW add Gina` and `$SW press remove-Alice` (fails with `#remove-Alice is disabled`). After `$SW wait wheel idle 30`, `$SW shot mid-spin-add` shows the logged winner's slice under the flapper and no Gina slice; the next `$SW spin` logs one more slice.
 - **Proof.** `added.png`, `removed.png`, `mid-spin-add.png`, and the `sw names` output before and after relaunch.
 

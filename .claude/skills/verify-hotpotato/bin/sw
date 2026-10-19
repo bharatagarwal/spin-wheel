@@ -3,11 +3,11 @@ set -euo pipefail
 
 SKILL_DIR=${0:A:h:h}
 REPO=${SKILL_DIR:h:h:h}
-HOME_DIR=${YOURTURN_VERIFY_HOME:-$REPO/.verify}
+HOME_DIR=${HOTPOTATO_VERIFY_HOME:-$REPO/.verify}
 STATE=$HOME_DIR/state
-APP=$HOME_DIR/YourTurnVerify.app
+APP=$HOME_DIR/HotPotatoVerify.app
 AX=$HOME_DIR/bin/ax
-DOMAIN=local.yourturn.verify
+DOMAIN=local.hotpotato.verify
 DEFAULT_NAMES=(Alice Bob Charlie Dana Eve)
 
 die() { print -u2 "sw: $*"; exit 1; }
@@ -23,9 +23,9 @@ build)
     (cd $REPO && ./build.sh >/dev/null 2>&1) || die "build failed: run ./build.sh in $REPO to see why"
     mkdir -p $HOME_DIR/bin
     rm -r -f $APP
-    cp -R $REPO/YourTurn.app $APP
+    cp -R $REPO/HotPotato.app $APP
     plutil -replace CFBundleIdentifier -string $DOMAIN $APP/Contents/Info.plist
-    plutil -replace CFBundleName -string "Your Turn Verify" $APP/Contents/Info.plist
+    plutil -replace CFBundleName -string "Hot Potato Verify" $APP/Contents/Info.plist
     codesign -s - --force $APP 2>/dev/null
     swiftc -O $SKILL_DIR/bin/ax.swift -o $AX
     swiftc -O $SKILL_DIR/bin/flick.swift -o $HOME_DIR/bin/flick
@@ -33,7 +33,7 @@ build)
     ;;
 launch)
     alive && die "instance $(pid) already running; run sw stop first"
-    [[ -x $APP/Contents/MacOS/YourTurn && -x $AX ]] || die "not built (sw build)"
+    [[ -x $APP/Contents/MacOS/HotPotato && -x $AX ]] || die "not built (sw build)"
     local names=("$@"); (( ${#names} )) || names=($DEFAULT_NAMES)
     mkdir -p $STATE
     local id=$(date +%Y%m%d-%H%M%S)
@@ -43,9 +43,9 @@ launch)
     defaults write $DOMAIN names -string "${(pj:\n:)names}"
     rm -f $STATE/pid
     # Launch through LaunchServices: exec'ing the binary directly can leave a SwiftUI app with no window.
-    open -n --env YOURTURN_VERIFY_LOG=$HOME_DIR/artifacts/$id/spins.log --stderr $HOME_DIR/artifacts/$id/app.stderr $APP
+    open -n --env HOTPOTATO_VERIFY_LOG=$HOME_DIR/artifacts/$id/spins.log --stderr $HOME_DIR/artifacts/$id/app.stderr $APP
     for _ in {1..50}; do
-        local found=$(pgrep -n -f "$APP/Contents/MacOS/YourTurn" || true)
+        local found=$(pgrep -n -f "$APP/Contents/MacOS/HotPotato" || true)
         [[ -n $found ]] && { print $found > $STATE/pid; break; }
         sleep 0.1
     done
@@ -62,9 +62,9 @@ doctor)
     local ok=1
     check() { if eval "$2" >/dev/null 2>&1; then print "ok    $1"; else print "FAIL  $1"; ok=0; fi; }
     check "instance running (pid $(pid))" alive
-    check "process is our verify build" "ps -p $(pid) -o command= | grep -q '$APP/Contents/MacOS/YourTurn'"
+    check "process is our verify build" "ps -p $(pid) -o command= | grep -q '$APP/Contents/MacOS/HotPotato'"
     check "bundle id is $DOMAIN" "[[ \$(plutil -extract CFBundleIdentifier raw $APP/Contents/Info.plist) == $DOMAIN ]]"
-    check "verify build is newer than sources" "[[ $APP/Contents/MacOS/YourTurn -nt $REPO/main.swift && $APP/Contents/MacOS/YourTurn -nt $REPO/Physics.swift ]]"
+    check "verify build is newer than sources" "[[ $APP/Contents/MacOS/HotPotato -nt $REPO/main.swift && $APP/Contents/MacOS/HotPotato -nt $REPO/Physics.swift ]]"
     check "accessibility reachable (#spin found)" "$AX $(pid) get spin"
     check "window on screen" "$AX $(pid) window-id"
     print "      names: $(defaults read $DOMAIN names 2>/dev/null | tr '\n' ',' || print '-')"

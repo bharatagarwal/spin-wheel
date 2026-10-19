@@ -1,11 +1,11 @@
 ---
 name: verify-turn-order
-description: Model-check who Your Turn calls on - the round phase, turn order and spin motion in main.swift (Model, TurnOrder, Team, SpinSession) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
+description: Model-check who Hot Potato calls on - the round phase, turn order and spin motion in main.swift (Model, TurnOrder, Team, SpinSession) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
 ---
 
 # Verify turn order
 
-`Verification/TurnOrder.tla` is a small model of how Your Turn decides who is called on. TLC explores every order of user actions and spin endings for a team drawn from four names, and checks the properties below in every reachable state. Tests and `sw` runs only try the orders someone thought of; this tries all of them.
+`Verification/TurnOrder.tla` is a small model of how Hot Potato decides who is called on. TLC explores every order of user actions and spin endings for a team drawn from four names, and checks the properties below in every reachable state. Tests and `sw` runs only try the orders someone thought of; this tries all of them.
 
 ## What it proves
 
@@ -64,7 +64,7 @@ Variables:
 
 Each action is one Model method or one display-link frame. They are atomic because SwiftUI actions and the `CADisplayLink` callback run one at a time on the main thread.
 
-Physics changes that only move *where* the wheel stops (forces, friction, geometry) are not covered here; use `./test.sh` (see the `verify-yourturn` skill's `features/fairness-test.md`).
+Physics changes that only move *where* the wheel stops (forces, friction, geometry) are not covered here; use `./test.sh` (see the `verify-hotpotato` skill's `features/fairness-test.md`).
 
 ## Run it
 
