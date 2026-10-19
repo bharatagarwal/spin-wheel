@@ -1,0 +1,121 @@
+#!/bin/zsh
+# Spin Wheel verification harness. Run `sw help` for commands.
+set -euo pipefail
+
+SKILL_DIR=${0:A:h:h}
+REPO=${SKILL_DIR:h:h:h}
+HOME_DIR=${SPINWHEEL_VERIFY_HOME:-$REPO/.verify}
+STATE=$HOME_DIR/state
+APP=$HOME_DIR/SpinWheelVerify.app
+AX=$HOME_DIR/bin/ax
+DOMAIN=local.spinwheel.verify
+DEFAULT_NAMES=(Alice Bob Charlie Dana Eve)
+
+die() { print -u2 "sw: $*"; exit 1; }
+pid() { [[ -f $STATE/pid ]] && cat $STATE/pid || true; }
+alive() { local p=$(pid); [[ -n $p ]] && kill -0 $p 2>/dev/null; }
+need_up() { alive || die "no verification instance running (sw launch)"; }
+run_id() { cat $STATE/run_id; }
+artifacts() { print $HOME_DIR/artifacts/$(run_id); }
+
+cmd=${1:-help}; shift || true
+case $cmd in
+build)
+    (cd $REPO && ./build.sh >/dev/null 2>&1) || die "build failed: run ./build.sh in $REPO to see why"
+    mkdir -p $HOME_DIR/bin
+    rm -r -f $APP
+    cp -R $REPO/SpinWheel.app $APP
+    # Separate bundle id = separate UserDefaults, so the user's real team list is never touched.
+    plutil -replace CFBundleIdentifier -string $DOMAIN $APP/Contents/Info.plist
+    plutil -replace CFBundleName -string "Spin Wheel Verify" $APP/Contents/Info.plist
+    codesign -s - --force $APP 2>/dev/null
+    swiftc -O $SKILL_DIR/bin/ax.swift -o $AX
+    print "built $APP"
+    ;;
+launch)
+    alive && die "instance $(pid) already running; run sw stop first"
+    [[ -x $APP/Contents/MacOS/SpinWheel && -x $AX ]] || die "not built (sw build)"
+    local names=("$@"); (( ${#names} )) || names=($DEFAULT_NAMES)
+    mkdir -p $STATE
+    local id=$(date +%Y%m%d-%H%M%S)
+    print $id > $STATE/run_id
+    mkdir -p $HOME_DIR/artifacts/$id
+    defaults delete $DOMAIN >/dev/null 2>&1 || true
+    defaults write $DOMAIN names -string "${(pj:\n:)names}"
+    SPINWHEEL_VERIFY_LOG=$HOME_DIR/artifacts/$id/spins.log $APP/Contents/MacOS/SpinWheel >$HOME_DIR/artifacts/$id/app.stderr 2>&1 &
+    print $! > $STATE/pid
+    for _ in {1..100}; do
+        if $AX $(pid) get spin >/dev/null 2>&1; then
+            print "ready pid=$(pid) run=$id artifacts=$(artifacts)"; exit 0
+        fi
+        sleep 0.1
+    done
+    die "app did not become ready in 10s (see $(artifacts)/app.stderr)"
+    ;;
+doctor)
+    local ok=1
+    check() { if eval "$2" >/dev/null 2>&1; then print "ok    $1"; else print "FAIL  $1"; ok=0; fi; }
+    check "instance running (pid $(pid))" alive
+    check "process is our verify build" "ps -p $(pid) -o command= | grep -q '$APP/Contents/MacOS/SpinWheel'"
+    check "bundle id is $DOMAIN" "[[ \$(plutil -extract CFBundleIdentifier raw $APP/Contents/Info.plist) == $DOMAIN ]]"
+    check "verify build is newer than sources" "[[ $APP/Contents/MacOS/SpinWheel -nt $REPO/main.swift && $APP/Contents/MacOS/SpinWheel -nt $REPO/Physics.swift ]]"
+    check "accessibility reachable (#spin found)" "$AX $(pid) get spin"
+    check "window on screen" "$AX $(pid) window-id"
+    print "      names: $(defaults read $DOMAIN names 2>/dev/null | tr '\n' ',' || print '-')"
+    print "      artifacts: $(artifacts 2>/dev/null || print '-')"
+    (( ok )) || exit 1
+    ;;
+spin)
+    need_up
+    local before=$( [[ -f $(artifacts)/spins.log ]] && wc -l < $(artifacts)/spins.log || print 0)
+    $AX $(pid) press spin
+    $AX $(pid) wait wheel spinning 2
+    $AX $(pid) wait wheel idle ${1:-30}
+    local after=$(wc -l < $(artifacts)/spins.log)
+    (( after > before )) || die "spin finished but nothing was logged"
+    tail -1 $(artifacts)/spins.log
+    ;;
+press|get|wait|tree)
+    need_up; $AX $(pid) $cmd "$@" ;;
+add)
+    need_up; (( $# == 1 )) || die "usage: sw add <name>"
+    $AX $(pid) set name-field "$1"
+    $AX $(pid) press add
+    ;;
+names)
+    defaults read $DOMAIN names 2>/dev/null || true ;;
+shot)
+    need_up; local name=${1:-shot}
+    screencapture -x -o -l $($AX $(pid) window-id) $(artifacts)/$name.png
+    print $(artifacts)/$name.png
+    ;;
+frames)
+    # sw frames <name> <count> <interval-seconds>: a timed series, e.g. during a spin
+    need_up; local name=${1:-frame} count=${2:-6} interval=${3:-0.5} wid=$($AX $(pid) window-id)
+    for i in {1..$count}; do screencapture -x -o -l $wid $(artifacts)/$name-$i.png; sleep $interval; done
+    print $(artifacts)/$name-*.png
+    ;;
+stop)
+    if alive; then kill $(pid); fi
+    defaults delete $DOMAIN >/dev/null 2>&1 || true
+    local kept=$(artifacts 2>/dev/null || true)
+    rm -r -f $STATE
+    print "stopped; evidence kept in ${kept:-$HOME_DIR/artifacts}"
+    ;;
+help|*)
+    cat <<EOF
+sw build                 build the app and a separate verify copy + ax driver
+sw launch [names...]     start an isolated instance (default team: $DEFAULT_NAMES)
+sw doctor                is this instance worth driving?
+sw spin [timeout]        press Spin, wait for the wheel to stop, print the logged result
+sw press|get <id>        press / read an element by accessibility identifier
+sw wait <id> <value> [s] wait until an element reads <value>
+sw tree                  dump the accessibility tree with identifiers
+sw add <name>            type a name into the field and press +
+sw names                 the persisted team list of the verify instance
+sw shot <name>           screenshot the window into the run's artifacts
+sw frames <name> <n> <s> n screenshots, s seconds apart
+sw stop                  kill our instance, wipe its defaults; artifacts are kept
+EOF
+    ;;
+esac
