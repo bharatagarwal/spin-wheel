@@ -18,26 +18,20 @@ Each property: the promise, then what the user would see if it broke.
 | `BannerOnWheel` | The banner's name is a slice on the wheel. | The banner names someone the flapper isn't pointing at. |
 | `WheelFrozenWhileSpinning` | While the wheel turns, the slices drawn are the slices simulated. | The wheel redraws as it stops and the flapper points at the wrong name (this happened with a mid-spin add before `706a41e`'s fix). |
 | `NoDuplicateSlices` | No name has two slices. | One person gets double odds. |
-| `NotPickedWhileHeld` | A spin is decided only after the user lets go. | Holding the wheel chooses the winner. **Fails today; see Findings.** |
+| `NotPickedWhileHeld` | A spin is decided only after the user lets go. | Holding the wheel chooses the winner. |
 
 ## Findings
 
-- **`NotPickedWhileHeld` fails.** Steps, in the code's terms:
-  1. The user starts dragging the wheel (`Model.drag(to:at:)` → `begin()` → `SpinSession.grab(at:)`).
-  2. They keep holding it for 30 s.
-  3. `WheelSim.settle()` hits `if time > 30 { phase = .stopped }`, which applies in every phase, including `.held`.
-  4. `SpinSession.frame` sees `sim.stopped` and calls `Model.finish(_:)`.
-  5. The slice the user is holding under the flapper is called on.
-  6. The finger is still dragging and the phase is now idle, so the next `Model.drag` starts a new spin.
-
-  This was confirmed against the real `WheelSim`: driving it at speed 0 stops it after 30.0 s. It is recorded as a known finding. `check.sh` expects it to keep failing and says `FIXED?` when it stops failing; then remove it from `KNOWN_FINDINGS` in `check.sh` and from this section.
+- None open.
+- Fixed: a wheel held for 30 s used to be decided while held. `WheelSim.settle()` applied its 30 s safety cap in every phase, so holding the wheel picked the slice under the flapper. The next `Model.drag` then started a new spin. The cap now counts from `push(_:)` and is skipped while `.held`. `NotPickedWhileHeld` guards this, and `mutants.py` brings the old behaviour back to prove it still fails.
+- When a property fails on code you didn't mean to change, report it here as a finding. To record it as known while it is unfixed, add it to `KNOWN_FINDINGS` in `check.sh`; the check then expects it to fail and says `FIXED?` when it stops failing.
 
 ## Does my change need this?
 
 Check whether your change touches the covered code since the sync commit:
 
 ```sh
-git diff 70062a6 -- main.swift Physics.swift
+git diff a5648c5 -- main.swift Physics.swift
 ```
 
 Covered code. If your diff touches any of it, run the check, and re-read the matching model action:
@@ -70,9 +64,9 @@ The first run downloads TLC v1.7.4 (`tla2tools.jar`, SHA-256 pinned in `check.sh
 
 Output lines:
 
-- `pass   P  N distinct states found`: holds in all N reachable states (currently 19,841).
+- `pass   P  N distinct states found`: holds in all N reachable states (currently 10,149).
 - `FAIL   P` plus `trace: …log`: violated; read the trace (below). Exit code 1.
-- `known  P (still fails, as recorded)`: an expected finding.
+- `known  P (still fails, as recorded)`: a finding listed in `KNOWN_FINDINGS` (none at the moment).
 - `FIXED? P now passes`: a known finding stopped failing; confirm the fix and update `KNOWN_FINDINGS` and Findings. Exit code 1.
 - `TLC did not finish cleanly`: a parse or config error, not a verdict. Exit code 2.
 
@@ -106,5 +100,5 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 
 ## Coverage record
 
-- Files: `main.swift` (`Team`, `TurnOrder`, `SpinSession`, `Model`, and `ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle`, and the `.held` case of `stepWheel`).
-- **Sync commit: `70062a6`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
+- Files: `main.swift` (`Team`, `TurnOrder`, `SpinSession`, `Model`, and `ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
+- **Sync commit: `a5648c5`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
