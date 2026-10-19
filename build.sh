@@ -3,7 +3,8 @@ set -e
 cd "$(dirname "$0")"
 APP=SpinWheel.app
 rm -rf $APP
-mkdir -p $APP/Contents/MacOS
+mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
+cp Icon/AppIcon.icns $APP/Contents/Resources/
 swiftc -O -parse-as-library main.swift Physics.swift -o $APP/Contents/MacOS/SpinWheel
 cat > $APP/Contents/Info.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -12,6 +13,7 @@ cat > $APP/Contents/Info.plist <<EOF
 <key>CFBundleExecutable</key><string>SpinWheel</string>
 <key>CFBundleIdentifier</key><string>local.spinwheel</string>
 <key>CFBundleName</key><string>Spin Wheel</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
