@@ -11,7 +11,7 @@
 
 ## How to get to it (user POV)
 
-- From the repo root: `./test.sh` (300 spins per size), or `./test.sh 2000` for a tighter check.
+- From the repo root: `./test.sh` (3000 spins per size), `./test.sh 1000` for a quicker check. Each run prints its seed; `./test.sh <spins> <seed>` replays it exactly.
 
 ## Driving it with sw
 
@@ -23,5 +23,5 @@ Not driven through `sw`; it is a plain command.
 
 ## Gotchas
 
-- With 8 sizes tested at p = 0.001, a single borderline `FAIL` happens by chance about 1% of the time. Rerun with `./test.sh 2000` before concluding there is a bias.
+- With 8 sizes tested at p = 0.001, a single borderline `FAIL` happens by chance about 1% of the time. Rerun with a fresh seed before concluding there is a bias, and replay the failing seed to investigate it.
 - It shares `Physics.swift` with the app but not the display link or `Model`. Bugs in how the app steps the simulation (e.g. `b57502e`) are invisible here; compare `sim` and `wall` in the app's `spins.log` for that.

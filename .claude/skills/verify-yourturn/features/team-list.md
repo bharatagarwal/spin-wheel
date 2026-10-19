@@ -6,7 +6,8 @@ The panel on the right lists the team. The user adds a name in the field at the 
 
 - `add`: typing a name and pressing Return or + adds it to the list and the wheel.
 - `add-reject`: blank names and duplicates are ignored.
-- `remove`: × removes a name from the list and the wheel.
+- `remove`: × removes a name from the list and the wheel. It is disabled while the wheel turns.
+- `add-mid-spin`: a name added while the wheel turns joins the wheel at the next spin, so the stopped wheel still matches the banner.
 - `persist`: the list survives quitting and relaunching.
 
 ## How to get to it (user POV)
@@ -23,7 +24,8 @@ Preconditions: fresh `sw launch` (Alice, Bob, Charlie, Dana, Eve).
 - **Reject blank.** `$SW add " "`. `$SW names` is unchanged.
 - **Remove.** `$SW press remove-Bob`. `$SW get member-Bob` fails (no element); `$SW names` has no Bob; `$SW shot removed` shows five slices without Bob.
 - **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `open -n .verify/YourTurnVerify.app`, write `pgrep -n -f YourTurnVerify.app/Contents/MacOS/YourTurn` into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
-- **Proof.** `added.png`, `removed.png`, and the `sw names` output before and after relaunch.
+- **Add mid-spin.** `$SW press spin`, then within a second `$SW add Gina` and `$SW press remove-Alice` (fails with `#remove-Alice is disabled`). After `$SW wait wheel idle 30`, `$SW shot mid-spin-add` shows the logged winner's slice under the flapper and no Gina slice; the next `$SW spin` logs one more slice.
+- **Proof.** `added.png`, `removed.png`, `mid-spin-add.png`, and the `sw names` output before and after relaunch.
 
 ## Gotchas
 
