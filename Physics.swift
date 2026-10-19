@@ -52,10 +52,11 @@ struct WheelSim {
         }
     }
 
-    enum Bearing {
+    enum Phase {
         case held(clockwiseSpeed: Double)
         case turning
-        case stuck
+        case stuck(stillFor: Double)
+        case stopped
     }
 
     struct Impact {
@@ -75,14 +76,12 @@ struct WheelSim {
     private(set) var tipFromVertical = 0.0
     private(set) var tipRate = 0.0
     private(set) var time = 0.0
-    private(set) var stopped = false
     private(set) var pushDirection = 1.0
-    private(set) var bearing = Bearing.stuck
+    private(set) var phase = Phase.stuck(stillFor: 0)
 
     static let step = 1.0 / 8000
     private var carry = 0.0
     private var touching = false
-    private var still = 0.0
 
     init(slices: Int, clockwiseAngle: Double = 0, params: Params = Params()) {
         self.slices = slices
@@ -94,13 +93,15 @@ struct WheelSim {
     mutating func push(_ angularVelocity: Double) {
         clockwiseSpeed = angularVelocity
         pushDirection = angularVelocity < 0 ? -1 : 1
-        bearing = .turning
-        stopped = false
+        phase = .turning
     }
 
     mutating func drive(_ angularVelocity: Double) {
-        bearing = .held(clockwiseSpeed: angularVelocity)
-        stopped = false
+        phase = .held(clockwiseSpeed: angularVelocity)
+    }
+
+    var stopped: Bool {
+        if case .stopped = phase { true } else { false }
     }
 
     mutating func advance(_ dt: Double, onImpact: (Impact) -> Void = { _ in }, onStep: (WheelSim) -> Void = { _ in }) {
@@ -136,7 +137,7 @@ struct WheelSim {
         stepFlapper(forceRoot: -p.hingeStiffness * rootFromVertical - rootDamping * rootRate + bend + contacts.forceRoot,
                     forceTip: -bend + contacts.forceTip, segmentMass: segmentMass)
         stepWheel(contactTorque: contacts.torque)
-        updateStopped()
+        settle()
         return contacts.impact
     }
 
@@ -213,36 +214,38 @@ struct WheelSim {
     private mutating func stepWheel(contactTorque: Double) {
         let p = params
         let h = Self.step
-        switch bearing {
+        switch phase {
         case .held(let fingerSpeed):
             clockwiseSpeed = fingerSpeed
+        case .stopped:
+            break
         case .stuck where abs(contactTorque) <= p.staticFriction:
             break
         case .stuck, .turning:
+            let stillFor = if case .stuck(let s) = phase { s } else { 0.0 }
             let sliding = clockwiseSpeed != 0 ? (clockwiseSpeed > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
             let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
             let next = clockwiseSpeed + torque / p.wheelInertia * h
             if next * sliding <= 0 {
                 clockwiseSpeed = 0
-                bearing = abs(contactTorque) <= p.staticFriction ? .stuck : .turning
+                phase = abs(contactTorque) <= p.staticFriction ? .stuck(stillFor: stillFor) : .turning
             } else {
                 clockwiseSpeed = next
-                bearing = .turning
+                phase = .turning
             }
         }
         clockwiseAngle += clockwiseSpeed * h
         time += h
     }
 
-    private mutating func updateStopped() {
+    private mutating func settle() {
         let h = Self.step
-        if case .stuck = bearing, abs(rootRate) < 0.3, abs(tipRate) < 0.6 {
-            still += h
-            if still > 0.15 { stopped = true }
-        } else {
-            still = 0
+        if case .stuck(let stillFor) = phase {
+            let flapperStill = abs(rootRate) < 0.3 && abs(tipRate) < 0.6
+            let settled = flapperStill ? stillFor + h : 0
+            phase = settled > 0.15 ? .stopped : .stuck(stillFor: settled)
         }
-        if time > 30 { stopped = true }
+        if time > 30 { phase = .stopped }
     }
 }
 
