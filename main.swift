@@ -511,6 +511,7 @@ struct ContentView: View {
 
 struct WheelAssembly: View {
     private let hubDeadZone = 0.12
+    @GestureState private var dragging = false
     let names: [String]
     let pose: WheelPose
     var onDrag: (Double, Date) -> Void = { _, _ in }
@@ -536,7 +537,8 @@ struct WheelAssembly: View {
                     let x = v.location.x - g.size.width / 2, y = v.location.y - g.size.height / 2
                     if x * x + y * y > pow(size * hubDeadZone, 2) { onDrag(atan2(y, x), v.time) }
                 }
-                .onEnded { _ in onRelease() })
+                .updating($dragging) { _, isDragging, _ in isDragging = true })
+            .onChange(of: dragging) { _, stillDragging in if !stillDragging { onRelease() } }
         }
         .aspectRatio(1, contentMode: .fit)
         .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
