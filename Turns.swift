@@ -3,19 +3,22 @@ import Foundation
 struct Team {
     private(set) var names: [String]
 
-    static func load() -> Team {
-        let defaults = UserDefaults.standard
-        let previousAppIDs = ["local.yourturn", "local.spinwheel"]
+    static let previousApps = ["local.yourturn", "local.spinwheel"].compactMap(UserDefaults.init(suiteName:))
+
+    static func load(from defaults: UserDefaults = .standard, orFrom previous: [UserDefaults] = previousApps) -> Team {
         let saved = defaults.string(forKey: "names")
-            ?? previousAppIDs.lazy.compactMap { UserDefaults(suiteName: $0)?.string(forKey: "names") }.first
+            ?? previous.lazy.compactMap { $0.string(forKey: "names") }.first
             ?? "Alice\nBob\nCharlie\nDana"
-        let team = Team(names: saved.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        team.save()
+        var team = Team(names: [])
+        for name in saved.split(separator: "\n") {
+            _ = team.add(name.trimmingCharacters(in: .whitespaces))
+        }
+        team.save(to: defaults)
         return team
     }
 
-    func save() {
-        UserDefaults.standard.set(names.joined(separator: "\n"), forKey: "names")
+    func save(to defaults: UserDefaults = .standard) {
+        defaults.set(names.joined(separator: "\n"), forKey: "names")
     }
 
     mutating func add(_ name: String) -> Bool {
