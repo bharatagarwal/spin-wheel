@@ -10,12 +10,12 @@ for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
     var rollbacks = 0
     for n in 0..<spins {
         let start = Double.random(in: 0..<(2 * .pi))
-        var sim = WheelSim(slices: slices, theta: start)
+        var sim = WheelSim(slices: slices, clockwiseAngle: start)
         sim.push(n % 2 == 0 ? spinVelocity() : -flickVelocity(spinVelocity()))
         while !sim.stopped { sim.advance(1.0 / 120) }
         counts[sim.winner] += 1
         durations.append(sim.time)
-        turns.append(abs(sim.theta - start) / (2 * .pi))
+        turns.append(abs(sim.clockwiseAngle - start) / (2 * .pi))
         swings.append(sim.peakRoot * 180 / .pi)
         bends.append(sim.peakBend * 180 / .pi)
         tips.append(sim.peakTip * 180 / .pi)

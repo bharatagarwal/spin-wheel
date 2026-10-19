@@ -1,6 +1,8 @@
 import Foundation
 
-enum Geometry {
+typealias YDownPoint = (x: Double, y: Double)
+
+enum WheelRadii {
     static let pegCircle = 0.93
     static let pegRadius = 0.016
     static let pivot = 1.06
@@ -45,11 +47,11 @@ struct WheelSim {
     let segment: Double
     var params: Params
 
-    private(set) var theta: Double
-    private(set) var omega = 0.0
-    private(set) var root = 0.0
+    private(set) var clockwiseAngle: Double
+    private(set) var clockwiseSpeed = 0.0
+    private(set) var rootFromVertical = 0.0
     private(set) var rootRate = 0.0
-    private(set) var tip = 0.0
+    private(set) var tipFromVertical = 0.0
     private(set) var tipRate = 0.0
     private(set) var time = 0.0
     private(set) var stopped = false
@@ -66,15 +68,15 @@ struct WheelSim {
     private var fingerSpeed: Double?
     private var direction = 1.0
 
-    init(slices: Int, theta: Double = 0, params: Params = Params()) {
+    init(slices: Int, clockwiseAngle: Double = 0, params: Params = Params()) {
         self.slices = slices
         self.segment = 2 * .pi / Double(slices)
-        self.theta = theta
+        self.clockwiseAngle = clockwiseAngle
         self.params = params.scaled(forSlices: slices)
     }
 
     mutating func push(_ angularVelocity: Double) {
-        omega = angularVelocity
+        clockwiseSpeed = angularVelocity
         direction = angularVelocity < 0 ? -1 : 1
         fingerSpeed = nil
         stuck = false
@@ -91,7 +93,7 @@ struct WheelSim {
         carry += dt
         var elapsed = 0.0
         while carry >= Self.step, !stopped {
-            if let speed = substep() { onImpact(Impact(offset: elapsed, speed: speed, reverse: omega * direction < 0)) }
+            if let speed = substep() { onImpact(Impact(offset: elapsed, speed: speed, reverse: clockwiseSpeed * direction < 0)) }
             carry -= Self.step
             elapsed += Self.step
         }
@@ -99,49 +101,49 @@ struct WheelSim {
 
     var winner: Int {
         let t = points.tip
-        var a = (atan2(t.y, t.x) - theta).truncatingRemainder(dividingBy: 2 * .pi)
+        var a = (atan2(t.y, t.x) - clockwiseAngle).truncatingRemainder(dividingBy: 2 * .pi)
         if a < 0 { a += 2 * .pi }
         return min(Int(a / segment), slices - 1)
     }
 
-    private var points: (joint: (x: Double, y: Double), tip: (x: Double, y: Double)) {
-        let half = Geometry.segmentLength
-        let joint = (x: -sin(root) * half, y: -Geometry.pivot + cos(root) * half)
-        return (joint, (x: joint.x - sin(tip) * half, y: joint.y + cos(tip) * half))
+    private var points: (joint: YDownPoint, tip: YDownPoint) {
+        let half = WheelRadii.segmentLength
+        let joint = (x: -sin(rootFromVertical) * half, y: -WheelRadii.pivot + cos(rootFromVertical) * half)
+        return (joint, (x: joint.x - sin(tipFromVertical) * half, y: joint.y + cos(tipFromVertical) * half))
     }
 
     private mutating func substep() -> Double? {
         let p = params
-        let a = Geometry.segmentLength, b = a
+        let a = WheelRadii.segmentLength, b = a
         let segmentMass = p.hingeInertia / (5 * a * a)
         let rootDamping = 2 * p.hingeDampingRatio * (p.hingeStiffness * p.hingeInertia).squareRoot()
         let bendDamping = 2 * p.bendDampingRatio * (p.bendStiffness * segmentMass * b * b).squareRoot()
-        let bend = p.bendStiffness * (tip - root) + bendDamping * (tipRate - rootRate)
-        var forceRoot = -p.hingeStiffness * root - rootDamping * rootRate + bend
+        let bend = p.bendStiffness * (tipFromVertical - rootFromVertical) + bendDamping * (tipRate - rootRate)
+        var forceRoot = -p.hingeStiffness * rootFromVertical - rootDamping * rootRate + bend
         var forceTip = -bend
 
-        let pivot = (x: 0.0, y: -Geometry.pivot)
+        let pivot: YDownPoint = (x: 0.0, y: -WheelRadii.pivot)
         let joint = points.joint
-        let rootDir = (x: -sin(root), y: cos(root)), tipDir = (x: -sin(tip), y: cos(tip))
+        let rootDir = (x: -sin(rootFromVertical), y: cos(rootFromVertical)), tipDir = (x: -sin(tipFromVertical), y: cos(tipFromVertical))
         var contactTorque = 0.0
         var impact: Double?
         var inContact = false
 
-        let pegBeforePointer = Int(floor((-.pi / 2 - theta) / segment))
+        let pegBeforePointer = Int(floor((-.pi / 2 - clockwiseAngle) / segment))
         for i in pegBeforePointer...(pegBeforePointer + 1) {
-            let angle = theta + Double(i) * segment
-            let cx = Geometry.pegCircle * cos(angle), cy = Geometry.pegCircle * sin(angle)
+            let angle = clockwiseAngle + Double(i) * segment
+            let cx = WheelRadii.pegCircle * cos(angle), cy = WheelRadii.pegCircle * sin(angle)
 
-            var best: (depth: Double, q: (x: Double, y: Double), rootJacobian: (x: Double, y: Double), tipJacobian: (x: Double, y: Double))?
+            var best: (depth: Double, q: YDownPoint, rootJacobian: YDownPoint, tipJacobian: YDownPoint)?
             for outer in [false, true] {
                 let start = outer ? joint : pivot
                 let dir = outer ? tipDir : rootDir
                 let len = outer ? b : a
                 let s = min(max((cx - start.x) * dir.x + (cy - start.y) * dir.y, 0), len)
                 let q = (x: start.x + s * dir.x, y: start.y + s * dir.y)
-                let depth = Geometry.pegRadius + Geometry.armRadius - ((cx - q.x) * (cx - q.x) + (cy - q.y) * (cy - q.y)).squareRoot()
-                let rootJacobian = outer ? (x: -a * cos(root), y: -a * sin(root)) : (x: -s * cos(root), y: -s * sin(root))
-                let tipJacobian = outer ? (x: -s * cos(tip), y: -s * sin(tip)) : (x: 0.0, y: 0.0)
+                let depth = WheelRadii.pegRadius + WheelRadii.armRadius - ((cx - q.x) * (cx - q.x) + (cy - q.y) * (cy - q.y)).squareRoot()
+                let rootJacobian = outer ? (x: -a * cos(rootFromVertical), y: -a * sin(rootFromVertical)) : (x: -s * cos(rootFromVertical), y: -s * sin(rootFromVertical))
+                let tipJacobian = outer ? (x: -s * cos(tipFromVertical), y: -s * sin(tipFromVertical)) : (x: 0.0, y: 0.0)
                 if depth > 0, depth > best?.depth ?? 0 { best = (depth, q, rootJacobian, tipJacobian) }
             }
             guard let c = best else { continue }
@@ -151,8 +153,8 @@ struct WheelSim {
             let dist = max((sx * sx + sy * sy).squareRoot(), 1e-9)
             let nx = sx / dist, ny = sy / dist
             let tx = -ny, ty = nx
-            let vx = -omega * cy - (c.rootJacobian.x * rootRate + c.tipJacobian.x * tipRate)
-            let vy = omega * cx - (c.rootJacobian.y * rootRate + c.tipJacobian.y * tipRate)
+            let vx = -clockwiseSpeed * cy - (c.rootJacobian.x * rootRate + c.tipJacobian.x * tipRate)
+            let vy = clockwiseSpeed * cx - (c.rootJacobian.y * rootRate + c.tipJacobian.y * tipRate)
             let vn = vx * nx + vy * ny
             let vt = vx * tx + vy * ty
             if !touching, vn < 0 { impact = -vn }
@@ -174,43 +176,43 @@ struct WheelSim {
 
     private mutating func stepFlapper(forceRoot: Double, forceTip: Double, segmentMass: Double) {
         let h = Self.step
-        let a = Geometry.segmentLength, b = a
-        let cosD = cos(root - tip), sinD = sin(root - tip)
+        let a = WheelRadii.segmentLength, b = a
+        let cosD = cos(rootFromVertical - tipFromVertical), sinD = sin(rootFromVertical - tipFromVertical)
         let m11 = 2 * segmentMass * a * a, m12 = segmentMass * a * b * cosD, m22 = segmentMass * b * b
         let r1 = forceRoot - segmentMass * a * b * sinD * tipRate * tipRate
         let r2 = forceTip + segmentMass * a * b * sinD * rootRate * rootRate
         let det = m11 * m22 - m12 * m12
         rootRate += (r1 * m22 - m12 * r2) / det * h
         tipRate += (m11 * r2 - m12 * r1) / det * h
-        root += rootRate * h
-        tip += tipRate * h
+        rootFromVertical += rootRate * h
+        tipFromVertical += tipRate * h
     }
 
     private mutating func stepWheel(contactTorque: Double) {
         let p = params
         let h = Self.step
         if let fingerSpeed {
-            omega = fingerSpeed
+            clockwiseSpeed = fingerSpeed
         } else {
             if stuck, abs(contactTorque) > p.staticFriction { stuck = false }
             if !stuck {
-                let sliding = omega != 0 ? (omega > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
-                let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * omega - p.airDrag * omega * abs(omega)
-                let next = omega + torque / p.wheelInertia * h
+                let sliding = clockwiseSpeed != 0 ? (clockwiseSpeed > 0 ? 1.0 : -1.0) : (contactTorque > 0 ? 1.0 : -1.0)
+                let torque = contactTorque - p.kineticFriction * sliding - p.viscousDrag * clockwiseSpeed - p.airDrag * clockwiseSpeed * abs(clockwiseSpeed)
+                let next = clockwiseSpeed + torque / p.wheelInertia * h
                 if next * sliding <= 0 {
-                    omega = 0
+                    clockwiseSpeed = 0
                     stuck = abs(contactTorque) <= p.staticFriction
                 } else {
-                    omega = next
+                    clockwiseSpeed = next
                 }
             }
         }
-        theta += omega * h
+        clockwiseAngle += clockwiseSpeed * h
         time += h
-        if omega * direction < -0.05 { rolledBack = true }
-        peakRoot = max(peakRoot, abs(root))
-        peakBend = max(peakBend, abs(tip - root))
-        peakTip = max(peakTip, abs(tip))
+        if clockwiseSpeed * direction < -0.05 { rolledBack = true }
+        peakRoot = max(peakRoot, abs(rootFromVertical))
+        peakBend = max(peakBend, abs(tipFromVertical - rootFromVertical))
+        peakTip = max(peakTip, abs(tipFromVertical))
     }
 
     private mutating func updateStopped() {

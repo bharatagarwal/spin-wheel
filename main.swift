@@ -146,9 +146,9 @@ final class Model: ObservableObject {
     }
     @Published var remaining: [String] = []
     @Published var done: [String] = []
-    @Published var rotation: Double = 0
-    @Published var flapperRoot: Double = 0
-    @Published var flapperTip: Double = 0
+    @Published var clockwiseRotation: Double = 0
+    @Published var flapperRootFromVertical: Double = 0
+    @Published var flapperTipFromVertical: Double = 0
     @Published var focus: Double = 0
     @Published var spinning = false
     @Published var winner: String?
@@ -185,7 +185,7 @@ final class Model: ObservableObject {
     func drag(to angle: Double) {
         if dragTarget == nil {
             guard start() else { return }
-            dragTarget = rotation
+            dragTarget = clockwiseRotation
             fingerAngle = angle
             fingerSamples = []
         }
@@ -212,7 +212,7 @@ final class Model: ObservableObject {
         if let w = winner { remaining.removeAll { $0 == w }; done.append(w); winner = nil }
         guard !remaining.isEmpty else { return false }
         spinning = true
-        sim = WheelSim(slices: remaining.count, theta: rotation)
+        sim = WheelSim(slices: remaining.count, clockwiseAngle: clockwiseRotation)
         spinStarted = Date()
         ticker?.stop()
         ticker = Ticker { [weak self] dt in self?.frame(dt) }
@@ -222,15 +222,15 @@ final class Model: ObservableObject {
     private func frame(_ dt: Double) {
         guard var sim else { return }
         let dt = min(dt, 1.0 / 20)
-        if let dragTarget { sim.drive((dragTarget - sim.theta) / max(dt, 1.0 / 240)) }
+        if let dragTarget { sim.drive((dragTarget - sim.clockwiseAngle) / max(dt, 1.0 / 240)) }
         sim.advance(dt) { impact in
             sound.tick(speed: impact.speed, delay: impact.offset, reverse: impact.reverse)
         }
         self.sim = sim
-        rotation = sim.theta
-        flapperRoot = sim.root
-        flapperTip = sim.tip
-        if dragTarget == nil { focus = max(focus, min(1, max(0, (5 - abs(sim.omega)) / 4))) }
+        clockwiseRotation = sim.clockwiseAngle
+        flapperRootFromVertical = sim.rootFromVertical
+        flapperTipFromVertical = sim.tipFromVertical
+        if dragTarget == nil { focus = max(focus, min(1, max(0, (5 - abs(sim.clockwiseSpeed)) / 4))) }
 
         guard sim.stopped else { return }
         ticker?.stop()
@@ -286,7 +286,7 @@ struct ContentView: View {
 
             HStack(spacing: 20) {
                 VStack(spacing: 28) {
-                    WheelAssembly(names: m.remaining, rotation: m.rotation, flapperRoot: m.flapperRoot, flapperTip: m.flapperTip,
+                    WheelAssembly(names: m.remaining, clockwiseRotation: m.clockwiseRotation, flapperRootFromVertical: m.flapperRootFromVertical, flapperTipFromVertical: m.flapperTipFromVertical,
                                   onDrag: m.drag(to:), onRelease: m.release)
                         .accessibilityElement()
                         .accessibilityIdentifier("wheel")
@@ -376,9 +376,9 @@ struct ContentView: View {
 struct WheelAssembly: View {
     private let hubDeadZone = 0.12
     let names: [String]
-    let rotation: Double
-    let flapperRoot: Double
-    let flapperTip: Double
+    let clockwiseRotation: Double
+    let flapperRootFromVertical: Double
+    let flapperTipFromVertical: Double
     var onDrag: (Double) -> Void = { _ in }
     var onRelease: () -> Void = {}
 
@@ -391,9 +391,9 @@ struct WheelAssembly: View {
                 Rim(rimWidth: rim)
                 WheelFace(names: names)
                     .frame(width: face, height: face)
-                    .rotationEffect(.radians(rotation))
+                    .rotationEffect(.radians(clockwiseRotation))
                 Hub(size: size * 0.1)
-                Flapper(root: flapperRoot, tip: flapperTip, faceRadius: face / 2)
+                Flapper(rootFromVertical: flapperRootFromVertical, tipFromVertical: flapperTipFromVertical, faceRadius: face / 2)
             }
             .frame(width: size, height: size)
             .position(x: g.size.width / 2, y: g.size.height / 2)
@@ -441,19 +441,19 @@ struct Hub: View {
 }
 
 struct Flapper: View {
-    let root: Double
-    let tip: Double
+    let rootFromVertical: Double
+    let tipFromVertical: Double
     let faceRadius: CGFloat
 
     var body: some View {
         Canvas { ctx, size in
             let r = faceRadius
-            let half = Geometry.armLength / 2 * r
-            let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - Geometry.pivot * r)
-            let rootDir = CGVector(dx: -sin(root), dy: cos(root)), tipDir = CGVector(dx: -sin(tip), dy: cos(tip))
+            let half = WheelRadii.armLength / 2 * r
+            let pivot = CGPoint(x: size.width / 2, y: size.height / 2 - WheelRadii.pivot * r)
+            let rootDir = CGVector(dx: -sin(rootFromVertical), dy: cos(rootFromVertical)), tipDir = CGVector(dx: -sin(tipFromVertical), dy: cos(tipFromVertical))
             let joint = CGPoint(x: pivot.x + rootDir.dx * half, y: pivot.y + rootDir.dy * half)
             let end = CGPoint(x: joint.x + tipDir.dx * half, y: joint.y + tipDir.dy * half)
-            let tipW = Geometry.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
+            let tipW = WheelRadii.armRadius * r, rootW = tipW * 2.4, midW = (tipW + rootW) / 2
             func side(_ p: CGPoint, _ d: CGVector, _ w: CGFloat) -> CGPoint { CGPoint(x: p.x - d.dy * w, y: p.y + d.dx * w) }
             let jointDir = CGVector(dx: (rootDir.dx + tipDir.dx) / 2, dy: (rootDir.dy + tipDir.dy) / 2)
 
@@ -461,7 +461,7 @@ struct Flapper: View {
             p.move(to: side(pivot, rootDir, rootW))
             p.addLine(to: side(joint, jointDir, midW))
             p.addLine(to: side(end, tipDir, tipW))
-            p.addArc(center: end, radius: tipW, startAngle: .radians(tip + .pi), endAngle: .radians(tip), clockwise: true)
+            p.addArc(center: end, radius: tipW, startAngle: .radians(tipFromVertical + .pi), endAngle: .radians(tipFromVertical), clockwise: true)
             p.addLine(to: side(joint, jointDir, -midW))
             p.addLine(to: side(pivot, rootDir, -rootW))
             p.closeSubpath()
@@ -524,8 +524,8 @@ struct WheelFace: View {
                 line.addLine(to: CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r))
                 ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
 
-                let pegR = r * Geometry.pegRadius
-                let pc = CGPoint(x: c.x + cos(a) * r * Geometry.pegCircle, y: c.y + sin(a) * r * Geometry.pegCircle)
+                let pegR = r * WheelRadii.pegRadius
+                let pc = CGPoint(x: c.x + cos(a) * r * WheelRadii.pegCircle, y: c.y + sin(a) * r * WheelRadii.pegCircle)
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR + 1, y: pc.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
                 ctx.fill(Path(ellipseIn: CGRect(x: pc.x - pegR, y: pc.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
                     Gradient(colors: [.white, Color(white: 0.6)]),
