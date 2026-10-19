@@ -41,12 +41,28 @@ Covered code. If your diff touches any of it, run the check, and re-read the mat
 | `Model.spin()`, `Model.begin()`, `TurnOrder.beginSpin()`, `TurnOrder.waiting` | `Spin`, `Begin`, `Waiting` |
 | `Model.drag(to:at:)` (idle branch), `SpinSession.grab(at:)` | `Grab` |
 | `Model.release()`, `SpinSession.release(using:)` | `Release` |
-| `SpinSession.frame(_:)` stop branch, `Model.finish(_:)`, `TurnOrder.markDone(_:)` | `Finish`, `Settle`, `Timeout` |
-| `WheelSim.Phase`, `WheelSim.settle()`, `WheelSim.stepWheel` `.held` case, `WheelSim.drive(_:)` | when `Settle`/`Timeout` are enabled (`motion`) |
+| `SpinSession.frame(_:)` stop branch, `Model.finish(_:)`, `TurnOrder.markDone(_:)` | `Stop`, `Finish` |
+| `WheelSim.Phase`, `WheelSim.settle()` (settling and the 30 s cap from `releasedAt`), `WheelSim.stepWheel` `.held` case, `WheelSim.drive(_:)` | `Stop` is enabled only while `motion = "coasting"`: a held wheel never stops |
 | `Model.add()`, `Team.add(_:)`, `TurnOrder.add(_:)`, `TurnOrder.addForNextSpin(_:)` | `Add` |
 | `Model.remove(_:)`, `Team.remove(_:)`, `TurnOrder.remove(_:)` | `Remove` |
 | `Model.reset()`, `TurnOrder.init(shuffling:)`, `ContentView.onAppear` | `Reset`, `Init` |
 | `Model.Phase`, `Model.winner`, `SpinSession.Motion` | variables `phase`, `winner`, `motion` |
+
+Variables:
+
+| Variable | Swift |
+|---|---|
+| `team` | `Team.names` |
+| `order` | `TurnOrder.order` (Reset keeps team order instead of shuffling) |
+| `done` | `TurnOrder.done` |
+| `wheel` | `TurnOrder.wheel`, the slices drawn |
+| `phase` | `Model.phase`: `"idle"` or `"spinning"` |
+| `winner` | the name in `Model.Phase.idle(winner:)`, or `None` |
+| `slices` | `SpinSession.slices` of the running session, `<<>>` when idle |
+| `motion` | `SpinSession.motion`: `"held"`, `"coasting"`, or `"none"` when there is no session (`.finished` is never observed because `Model.finish(_:)` drops the session in the same frame) |
+| `pickRecordForProperties` | nothing in Swift: what the last `Finish` picked and in what state, so the properties can inspect it |
+
+Each action is one Model method or one display-link frame. They are atomic because SwiftUI actions and the `CADisplayLink` callback run one at a time on the main thread.
 
 Physics changes that only move *where* the wheel stops (forces, friction, geometry) are not covered here; use `./test.sh` (see the `verify-yourturn` skill's `features/fairness-test.md`).
 
@@ -82,7 +98,7 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 ## Updating the model for an intended change
 
 1. Change the matching action so it does exactly what the new Swift does. One Model method or one display-link frame is one action. All of them run on the main thread, which is why each is atomic.
-2. If the change adds state the properties depend on, add a variable and say in its comment which Swift property it is.
+2. If the change adds state the properties depend on, add a variable and a row for it in the Variables table above.
 3. Run `Verification/check.sh` and `python3 -I Verification/mutants.py`. Add a mutant for any new property.
 4. Update the code-to-action table and, once you've confirmed that the model matches the code at your commit, move the sync commit below forward.
 

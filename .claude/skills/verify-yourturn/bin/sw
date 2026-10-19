@@ -24,7 +24,6 @@ build)
     mkdir -p $HOME_DIR/bin
     rm -r -f $APP
     cp -R $REPO/YourTurn.app $APP
-    # Separate bundle id = separate UserDefaults, so the user's real team list is never touched.
     plutil -replace CFBundleIdentifier -string $DOMAIN $APP/Contents/Info.plist
     plutil -replace CFBundleName -string "Your Turn Verify" $APP/Contents/Info.plist
     codesign -s - --force $APP 2>/dev/null

@@ -1,10 +1,7 @@
 #!/bin/zsh
-# Model-check TurnOrder.tla, one property per TLC run.
-# Usage: Verification/check.sh [property...]   (default: all)
-# Exit 0 when every property passes except the known findings, which must still fail.
 set -e
 HERE=${0:A:h}
-SPEC_DIR=${TURNORDER_SPEC_DIR:-$HERE}    # mutants.py points this at a broken copy
+SPEC_DIR=${TURNORDER_SPEC_DIR:-$HERE}
 TLC_VERSION=v1.7.4
 TLC_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 JAR=${HERE:h}/.verify/tools/tla2tools-$TLC_VERSION.jar
