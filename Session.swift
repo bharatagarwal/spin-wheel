@@ -116,12 +116,19 @@ struct SpinLog {
     let path: String
 
     func record(_ session: SpinSession, winner: Name, simTime: Double) {
-        let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", session.slices.count, winner.text, simTime, Date().timeIntervalSince(session.released))
-        if let handle = FileHandle(forWritingAtPath: path) ?? (FileManager.default.createFile(atPath: path, contents: nil) ? FileHandle(forWritingAtPath: path) : nil) {
+        let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n",
+                          session.slices.count, winner.text, simTime, Date().timeIntervalSince(session.released))
+        if let handle = openForAppending() {
             handle.seekToEndOfFile()
             handle.write(line.data(using: .utf8)!)
             try? handle.close()
         }
+    }
+
+    private func openForAppending() -> FileHandle? {
+        if let handle = FileHandle(forWritingAtPath: path) { return handle }
+        guard FileManager.default.createFile(atPath: path, contents: nil) else { return nil }
+        return FileHandle(forWritingAtPath: path)
     }
 }
 
@@ -168,13 +175,16 @@ final class Model: ObservableObject {
     }
 
     private func show(_ sim: WheelSim, held: Bool) {
-        standup.pose = WheelPose(clockwiseAngle: sim.clockwiseAngle, rootFromVertical: sim.rootFromVertical, tipFromVertical: sim.tipFromVertical)
+        standup.pose = WheelPose(clockwiseAngle: sim.clockwiseAngle,
+                                 rootFromVertical: sim.rootFromVertical, tipFromVertical: sim.tipFromVertical)
         if !held { focus = max(focus, min(1, max(0, (5 - abs(sim.clockwiseSpeed)) / 4))) }
     }
 
     private func finish(_ sim: WheelSim) {
         guard let session = standup.spin,
-              let name = withAnimation(.spring(response: 0.5, dampingFraction: 0.6), { standup.finish(atSlice: sim.winner) })
+              let name = withAnimation(.spring(response: 0.5, dampingFraction: 0.6), {
+                  standup.finish(atSlice: sim.winner)
+              })
         else { return }
         sound.chime()
         log?.record(session, winner: name, simTime: sim.time)

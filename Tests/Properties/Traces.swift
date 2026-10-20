@@ -34,7 +34,8 @@ func tla(_ standup: Standup<StopsWhereTold>) -> String {
     }
     let done = standup.turns.done.map { "\"\($0.text)\"" }.sorted().joined(separator: ", ")
     return "[team |-> \(tla(standup.team.names)), order |-> \(tla(standup.turns.order)), done |-> {\(done)}, "
-        + "wheel |-> \(tla(standup.turns.wheel)), phase |-> \"\(phase)\", winner |-> \(winner), slices |-> \(slices), motion |-> \"\(motion)\"]"
+        + "wheel |-> \(tla(standup.turns.wheel)), phase |-> \"\(phase)\", winner |-> \(winner), "
+        + "slices |-> \(slices), motion |-> \"\(motion)\"]"
 }
 
 @Test func theRealStandupLeavesTracesForTLC() throws {
@@ -51,7 +52,10 @@ func tla(_ standup: Standup<StopsWhereTold>) -> String {
         }
         traces.append(trace)
     }
-    let names = Set(team.names + typedNames.compactMap(Name.init)).map { "\"\($0.text)\"" }.sorted().joined(separator: ", ")
+    let names = Set(team.names + typedNames.compactMap(Name.init))
+        .map { "\"\($0.text)\"" }
+        .sorted()
+        .joined(separator: ", ")
     let module = """
         ---- MODULE Traces ----
         EXTENDS TurnOrder

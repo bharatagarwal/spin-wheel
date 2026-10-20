@@ -16,6 +16,10 @@ fi
 [[ -d /Applications/Xcode.app ]] || export TOOLCHAIN_DIR=/Library/Developer/CommandLineTools
 
 failed=()
+parses() {
+    local script
+    for script in "$@"; do zsh -n $script || return 1; done
+}
 step() {
     local name=$1; shift
     print "== $name"
@@ -24,6 +28,8 @@ step() {
 
 step build ./build.sh
 step lint swiftlint lint --strict --quiet
+step python ruff check --quiet .
+step shell parses *.sh Icon/*.sh Verification/*.sh .claude/skills/verify-hotpotato/bin/sw
 step complexity $SC $SOURCES --threshold $COMPLEXITY_LIMIT
 step unit ./unit-test.sh
 step properties ./property-test.sh

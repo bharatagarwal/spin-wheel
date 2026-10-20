@@ -1,4 +1,9 @@
-import os, pathlib, shutil, subprocess, sys, tempfile
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
 from typing import NamedTuple
 
 here = pathlib.Path(__file__).resolve().parent
@@ -26,7 +31,8 @@ MUTANTS = [
     Mutant("NotPickedWhileHeld", "WheelSim.settle() applies the 30 s cap while .held again",
      'Stop == phase = "spinning" /\\ motion = "coasting" /\\ Finish',
      'Stop == phase = "spinning" /\\ motion \\in {"held", "coasting"} /\\ Finish'),
-    Mutant("SpinsEnd", "WheelSim.settle() loses both the friction stop and the 30 s cap, so a coasting wheel may turn forever",
+    Mutant("SpinsEnd",
+           "WheelSim.settle() loses both the friction stop and the 30 s cap, so a coasting wheel may turn forever",
      "FairSpec == Spec /\\ UserLetsGo /\\ WheelComesToRest\n", "FairSpec == Spec /\\ UserLetsGo\n"),
     Mutant("SpinsEnd", "a held wheel never has to be let go (no release on drag end or cancel)",
      "FairSpec == Spec /\\ UserLetsGo /\\ WheelComesToRest\n", "FairSpec == Spec /\\ WheelComesToRest\n"),
@@ -36,11 +42,13 @@ CODE_MUTANTS = [
     Mutant("traces", "Standup.add(_:) puts a name added mid-spin on the spinning wheel",
      "case .spinning: turns.addForNextSpin(name)", "case .spinning: turns.add(name)"),
     Mutant("traces", "Standup.remove(_:) loses `guard case .idle`, so × works mid-spin",
-     "guard case .idle(let winner) = phase else { return }\n        team.remove(name)", "let winner = winner\n        team.remove(name)"),
+     "guard case .idle(let winner) = phase else { return }\n        team.remove(name)",
+     "let winner = winner\n        team.remove(name)"),
     Mutant("traces", "Standup.remove(_:) stops clearing the banner when the winner is removed",
      "        if winner == name { phase = .idle(winner: nil) }\n", ""),
     Mutant("traces", "Standup.reset() loses `guard case .idle`, so Reset works mid-spin",
-     "guard case .idle = phase else { return }\n        turns = TurnOrder(shuffling: team.names)", "turns = TurnOrder(shuffling: team.names)"),
+     "guard case .idle = phase else { return }\n        turns = TurnOrder(shuffling: team.names)",
+     "turns = TurnOrder(shuffling: team.names)"),
 ]
 
 missed = 0

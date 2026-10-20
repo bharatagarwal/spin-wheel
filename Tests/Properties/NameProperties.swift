@@ -4,7 +4,8 @@ import Testing
 @testable import HotPotatoCore
 
 let awkwardCharacters = [
-    "a", "B", "é", "e\u{301}", "🥔", "👩\u{200D}💻", "-", " ", "\t", "\n", "\r", "\r\n", "\u{2028}", "\u{00A0}", "\u{200B}", "\u{FEFF}",
+    "a", "B", "é", "e\u{301}", "🥔", "👩\u{200D}💻", "-",
+    " ", "\t", "\n", "\r", "\r\n", "\u{2028}", "\u{00A0}", "\u{200B}", "\u{FEFF}"
 ]
 let typedName = Gen.element(of: awkwardCharacters).map { $0 ?? "" }.array(of: 0...5).map { $0.joined() }
 
@@ -20,7 +21,10 @@ func looks(_ typed: String) -> String {
     await propertyCheck(count: 1000, input: typedName) { typed in
         let name = Name(typed)
         #expect((name == nil) == looks(typed).isEmpty, "typed \(typed.debugDescription)")
-        if let name { #expect(looks(name.text) == looks(typed), "typed \(typed.debugDescription), kept \(name.text.debugDescription)") }
+        if let name {
+            #expect(looks(name.text) == looks(typed),
+                    "typed \(typed.debugDescription), kept \(name.text.debugDescription)")
+        }
     }
 }
 
@@ -34,7 +38,8 @@ func looks(_ typed: String) -> String {
 @Test func twoTypedNamesAreOnePersonExactlyWhenTheyLookTheSame() async {
     await propertyCheck(count: 2000, input: typedName, typedName) { first, second in
         guard let firstName = Name(first), let secondName = Name(second) else { return }
-        #expect((firstName == secondName) == (looks(first) == looks(second)), "\(first.debugDescription) and \(second.debugDescription)")
+        #expect((firstName == secondName) == (looks(first) == looks(second)),
+                "\(first.debugDescription) and \(second.debugDescription)")
     }
 }
 

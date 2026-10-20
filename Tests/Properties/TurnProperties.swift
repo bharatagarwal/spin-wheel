@@ -72,7 +72,8 @@ struct RecordedStandup {
             #expect(turns.order.count == Set(turns.order).count, "nobody is in the order twice, after \(action)")
             #expect(Set(turns.wheel).isSubset(of: turns.order), "every slice is a team member, after \(action)")
             #expect(turns.done.isSubset(of: Set(turns.order)), "only members are done, after \(action)")
-            #expect(recorded.winnersThisRound.count == Set(recorded.winnersThisRound).count, "nobody wins twice in a round, after \(action)")
+            #expect(recorded.winnersThisRound.count == Set(recorded.winnersThisRound).count,
+                    "nobody wins twice in a round, after \(action)")
         }
     }
 }
@@ -83,14 +84,16 @@ struct RecordedStandup {
         for action in actions {
             recorded.apply(action)
             guard let announced = recorded.standup.winner else { continue }
-            let pointedAt = sliceUnderResting(flapperOver: recorded.standup.turns.wheel, at: recorded.standup.pose.clockwiseAngle)
+            let pointedAt = sliceUnderResting(flapperOver: recorded.standup.turns.wheel,
+                                              at: recorded.standup.pose.clockwiseAngle)
             #expect(pointedAt == announced, "banner says \(announced), flapper points at \(pointedAt), after \(action)")
         }
     }
 }
 
 @Test func everyoneGetsATurnBeforeAnyoneGoesAgain() async {
-    await propertyCheck(input: memberName.array(of: 1...8), Gen.double(in: 0..<(2 * .pi)).array(of: 20...20)) { added, stops in
+    let stops = Gen.double(in: 0..<(2 * .pi)).array(of: 20...20)
+    await propertyCheck(input: memberName.array(of: 1...8), stops) { added, stops in
         var recorded = RecordedStandup()
         for name in added { _ = recorded.standup.add(name) }
         let team = Set(recorded.standup.team.names)
@@ -103,7 +106,8 @@ struct RecordedStandup {
 
 @Test func reslicingKeepsTheFlapperAtTheSameSpotInTheWinnersSlice() async {
     let bend = Gen.double(in: -0.6...0.6)
-    await propertyCheck(count: 2000, input: zip(Gen.int(in: 1...40), Gen.int(in: 1...40)), Gen.double(in: -100...100), bend, bend) { sizes, angle, root, tip in
+    let sizes = zip(Gen.int(in: 1...40), Gen.int(in: 1...40))
+    await propertyCheck(count: 2000, input: sizes, Gen.double(in: -100...100), bend, bend) { sizes, angle, root, tip in
         let (oldSlices, newSlices) = sizes
         let pose = WheelPose(clockwiseAngle: angle, rootFromVertical: root, tipFromVertical: tip)
         let flapperTip = WheelRadii.flapper(rootFromVertical: root, tipFromVertical: tip).tip
@@ -111,7 +115,8 @@ struct RecordedStandup {
         let old = Int(before), new = old % newSlices
         let turned = pose.clockwiseAngle(keepingSlice: old, of: oldSlices, underTheFlapperAs: new, of: newSlices)
         let after = WheelRadii.slicesFromFirst(to: flapperTip, wheelAngle: turned, slices: newSlices)
-        #expect(Int(after) == new && abs((after - Double(new)) - (before - Double(old))) < 1e-9, "\(before) → \(after)")
+        #expect(Int(after) == new && abs((after - Double(new)) - (before - Double(old))) < 1e-9,
+                "\(before) → \(after)")
         #expect(abs(turned - angle) <= .pi + 1e-9, "turns the short way")
     }
 }

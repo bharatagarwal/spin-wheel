@@ -67,10 +67,13 @@ for slices in [2, 3, 4, 5, 6, 8, 10, 12] {
     func p50(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
     func spread(_ values: [Double]) -> String {
         let sorted = values.sorted()
-        return String(format: "%.1f/%.1f/%.1f", sorted[sorted.count / 10], sorted[sorted.count / 2], sorted[sorted.count * 9 / 10])
+        return String(format: "%.1f/%.1f/%.1f",
+                      sorted[sorted.count / 10], sorted[sorted.count / 2], sorted[sorted.count * 9 / 10])
     }
-    print(String(format: "%2d slices  chi²=%6.2f (limit %5.2f, %d fixed starts) %@  time %@ s  turns %@  rollback %4.1f%%  flapper tip %2.0f° (root %2.0f° + bend %2.0f°)",
-                 slices, chi, limit, fixedStartsPerSize, fair ? (lengthOK ? "ok  " : "LONG") : "FAIL", spread(durations), spread(turns),
+    let verdict = fair ? (lengthOK ? "ok  " : "LONG") : "FAIL"
+    print(String(format: "%2d slices  chi²=%6.2f (limit %5.2f, %d fixed starts) %@  time %@ s  turns %@  "
+                     + "rollback %4.1f%%  flapper tip %2.0f° (root %2.0f° + bend %2.0f°)",
+                 slices, chi, limit, fixedStartsPerSize, verdict, spread(durations), spread(turns),
                  100 * Double(rollbacks) / Double(spins), p50(tips), p50(swings), p50(bends)))
 }
 exit(failed ? 1 : 0)

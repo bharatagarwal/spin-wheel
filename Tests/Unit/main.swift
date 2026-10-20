@@ -18,21 +18,24 @@ func scratchDefaults(_ names: String?) -> UserDefaults {
 do {
     let defaults = scratchDefaults("Ana\n Ben \nAna\n\nCy\nBen")
     let team = Team.load(from: defaults, orFrom: [])
-    expect(team.names.map(\.text) == ["Ana", "Ben", "Cy"], "load drops duplicate and blank saved names, got \(team.names)")
+    expect(team.names.map(\.text) == ["Ana", "Ben", "Cy"],
+           "load drops duplicate and blank saved names, got \(team.names)")
     expect(defaults.string(forKey: "names") == "Ana\nBen\nCy", "load writes the cleaned list back")
 }
 
 do {
     let previous = scratchDefaults("Old\nNames")
     let team = Team.load(from: scratchDefaults(nil), orFrom: [scratchDefaults(nil), previous])
-    expect(team.names.map(\.text) == ["Old", "Names"], "load migrates from the first previous app that has names, got \(team.names)")
+    expect(team.names.map(\.text) == ["Old", "Names"],
+           "load migrates from the first previous app that has names, got \(team.names)")
 }
 
 do {
     var team = Team.load(from: scratchDefaults("Ana"), orFrom: [])
     expect(team.add("Ana") == nil, "add rejects a duplicate")
     expect(team.add(" \u{200B}\n") == nil, "add rejects a name with nothing visible in it")
-    expect(team.add(" Ben\r\n Cy ")?.text == "Ben Cy" && team.names.map(\.text) == ["Ana", "Ben Cy"], "add keeps a typed name on one line")
+    expect(team.add(" Ben\r\n Cy ")?.text == "Ben Cy" && team.names.map(\.text) == ["Ana", "Ben Cy"],
+           "add keeps a typed name on one line")
     expect(team.add("👩\u{200D}💻")?.text == "👩\u{200D}💻", "add keeps the joiners inside an emoji")
     team.remove(Name("Ana")!)
     expect(team.names.map(\.text) == ["Ben Cy", "👩\u{200D}💻"], "remove drops the name")
@@ -46,7 +49,8 @@ do {
     turns.markDone(slices[0])
     expect(turns.wheel == slices, "the winner's slice stays on the wheel until the next spin")
     let next = turns.beginSpin()
-    expect(!next.contains(slices[0]) && next.contains(Name("Dee")!) && next.count == 3, "next spin drops the winner and includes the late add, got \(next)")
+    expect(!next.contains(slices[0]) && next.contains(Name("Dee")!) && next.count == 3,
+           "next spin drops the winner and includes the late add, got \(next)")
 }
 
 do {
@@ -54,7 +58,8 @@ do {
     let slices = turns.beginSpin()
     turns.markDone(slices[0])
     turns.remove(slices[0])
-    expect(!turns.wheel.contains(slices[0]) && !turns.done.contains(slices[0]) && !turns.order.contains(slices[0]), "removing the winner removes them everywhere")
+    expect(!turns.wheel.contains(slices[0]) && !turns.done.contains(slices[0]) && !turns.order.contains(slices[0]),
+           "removing the winner removes them everywhere")
 }
 
 do {
@@ -81,7 +86,8 @@ do {
     var rng = SystemRandomNumberGenerator()
     let pushes = (0..<2000).map { _ in flickVelocity(-30, using: &rng) }
     expect(pushes.allSatisfy { $0 < 0 }, "an anticlockwise flick spins anticlockwise")
-    expect(pushes.allSatisfy { abs($0) <= flickPushMeanSpeeds.upperBound + pushSpeedMaxDeviations * pushSpeedStandardDeviation }, "a hard flick is capped")
+    let hardest = flickPushMeanSpeeds.upperBound + pushSpeedMaxDeviations * pushSpeedStandardDeviation
+    expect(pushes.allSatisfy { abs($0) <= hardest }, "a hard flick is capped")
 }
 
 print(failures == 0 ? "unit tests: all passed" : "unit tests: \(failures) failed")

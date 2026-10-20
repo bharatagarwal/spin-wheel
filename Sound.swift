@@ -26,7 +26,8 @@ final class Sound {
         engine.mainMixerNode.outputVolume = 0.8
         try? engine.start()
         // macOS stops the engine whenever the output device changes; bring it back.
-        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
+                                               queue: .main) { [weak self] _ in
             try? self?.engine.start()
         }
     }
@@ -69,7 +70,7 @@ final class Sound {
             Mode(freq: 760 * jitter(), decay: 0.010, gain: 0.55),
             Mode(freq: 1290 * jitter(), decay: 0.007, gain: 0.4),
             Mode(freq: 2150 * jitter(), decay: 0.005, gain: 0.25),
-            Mode(freq: 3400 * jitter(), decay: 0.003, gain: 0.12),
+            Mode(freq: 3400 * jitter(), decay: 0.003, gain: 0.12)
         ]
         let sampleRate = format.sampleRate
         var state = modes.map { _ in (0.0, 0.0) }
@@ -81,7 +82,8 @@ final class Sound {
             for (index, mode) in modes.enumerated() {
                 let damping = exp(-1 / (mode.decay * sampleRate))
                 let angularStep = 2 * .pi * mode.freq / sampleRate
-                let out = 2 * damping * cos(angularStep) * state[index].0 - damping * damping * state[index].1 + strike * (1 - damping)
+                let out = 2 * damping * cos(angularStep) * state[index].0 - damping * damping * state[index].1
+                    + strike * (1 - damping)
                 state[index] = (out, state[index].0)
                 mixed += out * mode.gain
             }

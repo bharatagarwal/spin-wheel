@@ -165,7 +165,10 @@ struct Standup<Spin: Spinning> {
     private mutating func keepingTheWinnerUnderTheFlapper(_ change: (inout TurnOrder) -> Void) {
         let before = turns.wheel
         change(&turns)
-        guard let winner, let old = before.firstIndex(of: winner), let new = turns.wheel.firstIndex(of: winner) else { return }
-        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count, underTheFlapperAs: new, of: turns.wheel.count)
+        guard let winner, let old = before.firstIndex(of: winner), let new = turns.wheel.firstIndex(of: winner) else {
+            return
+        }
+        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count,
+                                                  underTheFlapperAs: new, of: turns.wheel.count)
     }
 }

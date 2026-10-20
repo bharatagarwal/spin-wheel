@@ -4,7 +4,8 @@ import Testing
 @testable import HotPotatoCore
 
 @Test func turningTheStartOneSliceOnCallsOnTheNextSlice() async {
-    await propertyCheck(count: 150, input: Gen.int(in: 2...40), startAngle, flick, Gen.uint64()) { slices, start, measured, seed in
+    let slicesCount = Gen.int(in: 2...40), seeds = Gen.uint64()
+    await propertyCheck(count: 150, input: slicesCount, startAngle, flick, seeds) { slices, start, measured, seed in
         let speed = push(flicked: measured, seed: seed)
         let slice = 2 * Double.pi / Double(slices)
         var watch = Watch()

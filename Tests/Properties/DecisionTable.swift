@@ -39,7 +39,8 @@ struct Decision {
     var outcome: Outcome
 
     func covers(_ situation: Case) -> Bool {
-        (act ?? situation.act) == situation.act && (phase ?? situation.phase) == situation.phase && (waiting ?? situation.waiting) == situation.waiting && (named ?? situation.named) == situation.named
+        (act ?? situation.act) == situation.act && (phase ?? situation.phase) == situation.phase
+            && (waiting ?? situation.waiting) == situation.waiting && (named ?? situation.named) == situation.named
     }
 }
 
@@ -58,12 +59,14 @@ let decisions = [
     Decision(act: .remove, phase: .idle, named: .newcomer, outcome: .nothing),
     Decision(act: .remove, phase: .spinning, waiting: .somebody, outcome: .nothing),
     Decision(act: .reset, phase: .idle, outcome: .startsANewRound),
-    Decision(act: .reset, phase: .spinning, waiting: .somebody, outcome: .nothing),
+    Decision(act: .reset, phase: .spinning, waiting: .somebody, outcome: .nothing)
 ]
 
 let everyCase = Act.allCases.flatMap { act in
     Phase.allCases.flatMap { phase in
-        Waiting.allCases.flatMap { waiting in Named.allCases.map { Case(act: act, phase: phase, waiting: waiting, named: $0) } }
+        Waiting.allCases.flatMap { waiting in
+            Named.allCases.map { Case(act: act, phase: phase, waiting: waiting, named: $0) }
+        }
     }
 }
 
@@ -76,33 +79,41 @@ let everyCase = Act.allCases.flatMap { act in
 
 let newcomer = Name("Zed")!
 
-func check(_ outcome: Outcome, of act: Act, by name: Name, from before: Standup<StopsWhereTold>, to after: Standup<StopsWhereTold>) {
+func check(_ outcome: Outcome, of act: Act, by name: Name,
+           from before: Standup<StopsWhereTold>, to after: Standup<StopsWhereTold>) {
     let was = before.turns, now = after.turns
     switch outcome {
     case .nothing:
         #expect(tla(after) == tla(before))
     case .startsASpin:
-        #expect(after.spin?.slices == was.waiting && now.wheel == was.waiting && now.order == was.order && now.done == was.done)
+        #expect(after.spin?.slices == was.waiting && now.wheel == was.waiting)
+        #expect(now.order == was.order && now.done == was.done)
     case .callsOnASlice:
-        #expect(after.winner.map(before.spin!.slices.contains) == true && now.done == was.done.union([after.winner!]) && now.wheel == was.wheel)
+        #expect(after.winner.map(before.spin!.slices.contains) == true)
+        #expect(now.done == was.done.union([after.winner!]) && now.wheel == was.wheel)
     case .joinsTheWheel:
-        #expect(after.team.names == before.team.names + [name] && now.order == was.order + [name] && now.wheel == was.wheel + [name])
+        #expect(after.team.names == before.team.names + [name])
+        #expect(now.order == was.order + [name] && now.wheel == was.wheel + [name])
         #expect(after.winner == before.winner)
     case .joinsTheNextSpin:
-        #expect(after.team.names == before.team.names + [name] && now.order == was.order + [name] && now.wheel == was.wheel)
+        #expect(after.team.names == before.team.names + [name])
+        #expect(now.order == was.order + [name] && now.wheel == was.wheel)
         #expect(after.spin === before.spin)
     case .leaves:
-        #expect(after.team.names == before.team.names.filter { $0 != name } && now.order == was.order.filter { $0 != name })
+        #expect(after.team.names == before.team.names.filter { $0 != name })
+        #expect(now.order == was.order.filter { $0 != name })
         #expect(now.wheel == was.wheel.filter { $0 != name } && now.done == was.done.subtracting([name]))
         #expect(after.winner == (before.winner == name ? nil : before.winner) && after.spin == nil)
     case .startsANewRound:
-        #expect(now.done.isEmpty && after.winner == nil && Set(now.order) == Set(after.team.names) && now.wheel == now.order)
+        #expect(now.done.isEmpty && after.winner == nil)
+        #expect(Set(now.order) == Set(after.team.names) && now.wheel == now.order)
     case .cannotHappen:
         Issue.record("reached a case the table says cannot happen: \(tla(before))")
     }
 }
 
-func apply(_ act: Act, by name: Name, to standup: inout Standup<StopsWhereTold>, using rng: inout some RandomNumberGenerator) {
+func apply(_ act: Act, by name: Name, to standup: inout Standup<StopsWhereTold>,
+           using rng: inout some RandomNumberGenerator) {
     switch act {
     case .begin: _ = standup.begin { slices, _ in StopsWhereTold(slices: slices) }
     case .finish: _ = standup.spin.map { standup.finish(atSlice: Int.random(in: $0.slices.indices, using: &rng)) }
@@ -121,8 +132,10 @@ func apply(_ act: Act, by name: Name, to standup: inout Standup<StopsWhereTold>,
             let phase: Phase = standup.spin == nil ? .idle : .spinning
             let waiting: Waiting = standup.turns.waiting.isEmpty ? .nobody : .somebody
             for act in Act.allCases {
-                for (named, name) in [(Named.newcomer, newcomer), (.member, standup.team.names.randomElement(using: &rng))] {
-                    guard let name, let row = decisions.firstIndex(where: { $0.covers(Case(act: act, phase: phase, waiting: waiting, named: named)) }) else { continue }
+                let someone = standup.team.names.randomElement(using: &rng)
+                for (named, name) in [(Named.newcomer, newcomer), (.member, someone)] {
+                    let situation = Case(act: act, phase: phase, waiting: waiting, named: named)
+                    guard let name, let row = decisions.firstIndex(where: { $0.covers(situation) }) else { continue }
                     taken.insert(row)
                     var after = standup
                     apply(act, by: name, to: &after, using: &rng)

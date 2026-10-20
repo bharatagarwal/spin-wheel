@@ -1,13 +1,5 @@
-only_rules:
-  - cyclomatic_complexity
-  - function_body_length
+opt_in_rules:
   - closure_body_length
-  - type_body_length
-  - file_length
-  - function_parameter_count
-  - nesting
-  - large_tuple
-  - identifier_name
 included:
   - main.swift
   - Session.swift
@@ -15,5 +7,8 @@ included:
   - Sound.swift
   - Physics.swift
   - Tests
+  - Icon
+  - .claude/skills/verify-hotpotato/bin
+line_length: 120
 cyclomatic_complexity:
   ignores_case_statements: true

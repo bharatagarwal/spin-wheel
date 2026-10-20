@@ -127,7 +127,9 @@ struct Drag: Sendable, CustomStringConvertible {
 }
 
 @Test func aWheelDraggedAnyWaySettlesCleanly() async {
-    let drags = zip(Gen.double(in: -80...80), Gen.int(in: 1...40)).map { Drag(fingerSpeed: $0, frames: $1) }.array(of: 1...6)
+    let drags = zip(Gen.double(in: -80...80), Gen.int(in: 1...40))
+        .map { Drag(fingerSpeed: $0, frames: $1) }
+        .array(of: 1...6)
     await propertyCheck(count: 150, input: teamSize, startAngle, drags, Gen.uint64()) { slices, start, drags, seed in
         var sim = WheelSim(slices: slices, clockwiseAngle: start)
         var watch = Watch()
@@ -166,6 +168,7 @@ func sliceBetweenPegs(around point: YDownPoint, of slices: Int, wheelAngle: Doub
         let restsOnAPeg = abs(tipFromPeg) < WheelRadii.pegRadius / WheelRadii.pegCircle
         let pointer = restsOnAPeg ? WheelRadii.armOverThePegTop(flapper) : flapper.tip
         let expected = sliceBetweenPegs(around: pointer, of: slices, wheelAngle: sim.clockwiseAngle)
-        #expect(sim.winner == expected, "resting on a peg: \(restsOnAPeg); winner \(sim.winner), the arm is in \(expected)")
+        #expect(sim.winner == expected,
+                "resting on a peg: \(restsOnAPeg); winner \(sim.winner), the arm is in \(expected)")
     }
 }

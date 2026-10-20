@@ -42,7 +42,8 @@ struct WheelColumn: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            WheelAssembly(names: model.turns.wheel.map(\.text), pose: model.pose, onDrag: model.drag(to:at:), onRelease: model.release)
+            WheelAssembly(names: model.turns.wheel.map(\.text), pose: model.pose,
+                          onDrag: model.drag(to:at:), onRelease: model.release)
                 .accessibilityElement()
                 .accessibilityIdentifier("wheel")
                 .accessibilityValue(model.spinning ? "spinning" : "idle")
@@ -96,7 +97,9 @@ struct TeamPanel: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(model.team.names, id: \.self) { name in
-                        MemberRow(name: name.text, done: model.turns.done.contains(name), removable: !model.spinning) { model.remove(name) }
+                        MemberRow(name: name.text, done: model.turns.done.contains(name), removable: !model.spinning) {
+                            model.remove(name)
+                        }
                     }
                 }
             }
@@ -169,8 +172,11 @@ struct WheelAssembly: View {
             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             .gesture(DragGesture(minimumDistance: 4)
                 .onChanged { drag in
-                    let fromCenterX = drag.location.x - geometry.size.width / 2, fromCenterY = drag.location.y - geometry.size.height / 2
-                    if fromCenterX * fromCenterX + fromCenterY * fromCenterY > pow(size * hubDeadZone, 2) { onDrag(atan2(fromCenterY, fromCenterX), drag.time) }
+                    let fromCenterX = drag.location.x - geometry.size.width / 2
+                    let fromCenterY = drag.location.y - geometry.size.height / 2
+                    if fromCenterX * fromCenterX + fromCenterY * fromCenterY > pow(size * hubDeadZone, 2) {
+                        onDrag(atan2(fromCenterY, fromCenterX), drag.time)
+                    }
                 }
                 .updating($dragging) { _, isDragging, _ in isDragging = true })
             .onChange(of: dragging) { _, stillDragging in if !stillDragging { onRelease() } }
@@ -217,11 +223,15 @@ struct Flapper: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let points = WheelRadii.flapper(rootFromVertical: pose.rootFromVertical, tipFromVertical: pose.tipFromVertical)
-            func onScreen(_ point: YDownPoint) -> CGPoint { CGPoint(x: size.width / 2 + point.x * faceRadius, y: size.height / 2 + point.y * faceRadius) }
+            let points = WheelRadii.flapper(rootFromVertical: pose.rootFromVertical,
+                                            tipFromVertical: pose.tipFromVertical)
+            func onScreen(_ point: YDownPoint) -> CGPoint {
+                CGPoint(x: size.width / 2 + point.x * faceRadius, y: size.height / 2 + point.y * faceRadius)
+            }
             let pivot = onScreen(points.pivot)
             let rootWidth = WheelRadii.armRadius * faceRadius * 2.4
-            drawArm(outline(pivot: pivot, joint: onScreen(points.joint), end: onScreen(points.tip)), pivot: pivot, rootWidth: rootWidth, in: ctx)
+            let arm = outline(pivot: pivot, joint: onScreen(points.joint), end: onScreen(points.tip))
+            drawArm(arm, pivot: pivot, rootWidth: rootWidth, in: ctx)
             drawPivotCap(at: pivot, radius: rootWidth * 1.5, in: ctx)
         }
         .allowsHitTesting(false)
@@ -242,7 +252,8 @@ struct Flapper: View {
         path.move(to: side(pivot, rootDir, rootW))
         path.addLine(to: side(joint, jointDir, midW))
         path.addLine(to: side(end, tipDir, tipW))
-        path.addArc(center: end, radius: tipW, startAngle: .radians(pose.tipFromVertical + .pi), endAngle: .radians(pose.tipFromVertical), clockwise: true)
+        path.addArc(center: end, radius: tipW, startAngle: .radians(pose.tipFromVertical + .pi),
+                    endAngle: .radians(pose.tipFromVertical), clockwise: true)
         path.addLine(to: side(joint, jointDir, -midW))
         path.addLine(to: side(pivot, rootDir, -rootW))
         path.closeSubpath()
@@ -253,7 +264,8 @@ struct Flapper: View {
         ctx.drawLayer { layer in
             layer.addFilter(.shadow(color: .black.opacity(0.5), radius: 2, x: 1, y: 2))
             layer.fill(arm, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.75)]),
-                                              startPoint: CGPoint(x: pivot.x - rootWidth, y: pivot.y), endPoint: CGPoint(x: pivot.x + rootWidth, y: pivot.y)))
+                                                  startPoint: CGPoint(x: pivot.x - rootWidth, y: pivot.y),
+                                                  endPoint: CGPoint(x: pivot.x + rootWidth, y: pivot.y)))
         }
     }
 
@@ -261,8 +273,9 @@ struct Flapper: View {
         ctx.drawLayer { layer in
             layer.addFilter(.shadow(color: .black.opacity(0.5), radius: 1.5, y: 1))
             layer.fill(Path(ellipseIn: CGRect(x: pivot.x - capR, y: pivot.y - capR, width: capR * 2, height: capR * 2)),
-                   with: .radialGradient(Gradient(colors: [Color(white: 0.95), Color(white: 0.55)]),
-                                         center: CGPoint(x: pivot.x - capR * 0.3, y: pivot.y - capR * 0.3), startRadius: 0, endRadius: capR * 1.2))
+                       with: .radialGradient(Gradient(colors: [Color(white: 0.95), Color(white: 0.55)]),
+                                             center: CGPoint(x: pivot.x - capR * 0.3, y: pivot.y - capR * 0.3),
+                                             startRadius: 0, endRadius: capR * 1.2))
         }
     }
 }
@@ -294,7 +307,8 @@ struct WheelFace: View {
         for index in names.indices {
             var path = Path()
             path.move(to: center)
-            path.addArc(center: center, radius: radius, startAngle: .radians(angle(index)), endAngle: .radians(angle(index + 1)), clockwise: false)
+            path.addArc(center: center, radius: radius, startAngle: .radians(angle(index)),
+                        endAngle: .radians(angle(index + 1)), clockwise: false)
             path.closeSubpath()
             ctx.fill(path, with: .color(palette[index % palette.count]))
         }
@@ -306,7 +320,9 @@ struct WheelFace: View {
             var rotated = ctx
             rotated.translateBy(x: center.x, y: center.y)
             rotated.rotate(by: .radians((angle(index) + angle(index + 1)) / 2))
-            let text = Text(name).font(.system(size: fontSize, weight: .heavy, design: .rounded)).foregroundColor(.white)
+            let text = Text(name)
+                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+                .foregroundColor(.white)
             rotated.drawLayer { layer in
                 layer.addFilter(.shadow(color: .black.opacity(0.45), radius: 1.5, x: 0, y: 1))
                 layer.draw(text, at: CGPoint(x: radius * 0.82, y: 0), anchor: .trailing)
@@ -319,15 +335,20 @@ struct WheelFace: View {
         for index in 0..<names.count {
             var line = Path()
             line.move(to: center)
-            line.addLine(to: CGPoint(x: center.x + cos(angle(index)) * radius, y: center.y + sin(angle(index)) * radius))
+            line.addLine(to: CGPoint(x: center.x + cos(angle(index)) * radius,
+                                     y: center.y + sin(angle(index)) * radius))
             ctx.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1.5)
 
             let peg = WheelRadii.peg(index, of: names.count)
             let pegCenter = CGPoint(x: center.x + peg.x * radius, y: center.y + peg.y * radius)
-            ctx.fill(Path(ellipseIn: CGRect(x: pegCenter.x - pegR + 1, y: pegCenter.y - pegR + 2, width: pegR * 2, height: pegR * 2)), with: .color(.black.opacity(0.4)))
-            ctx.fill(Path(ellipseIn: CGRect(x: pegCenter.x - pegR, y: pegCenter.y - pegR, width: pegR * 2, height: pegR * 2)), with: .radialGradient(
+            let pegSize = CGSize(width: pegR * 2, height: pegR * 2)
+            let shadow = CGRect(origin: CGPoint(x: pegCenter.x - pegR + 1, y: pegCenter.y - pegR + 2), size: pegSize)
+            ctx.fill(Path(ellipseIn: shadow), with: .color(.black.opacity(0.4)))
+            let pegRect = CGRect(origin: CGPoint(x: pegCenter.x - pegR, y: pegCenter.y - pegR), size: pegSize)
+            ctx.fill(Path(ellipseIn: pegRect), with: .radialGradient(
                 Gradient(colors: [.white, Color(white: 0.6)]),
-                center: CGPoint(x: pegCenter.x - pegR * 0.35, y: pegCenter.y - pegR * 0.35), startRadius: 0, endRadius: pegR * 1.3))
+                center: CGPoint(x: pegCenter.x - pegR * 0.35, y: pegCenter.y - pegR * 0.35),
+                startRadius: 0, endRadius: pegR * 1.3))
         }
     }
 }
