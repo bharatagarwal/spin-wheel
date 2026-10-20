@@ -105,7 +105,7 @@ Kills only the PID that `sw launch` recorded, deletes the `local.hotpotato.verif
 
 ## Not covered by this harness
 
-- `./check.sh` runs every non-UI check in one go (build, SwiftLint, cognitive complexity ≤ 15 via swift-complexity, `./unit-test.sh`, the property-based tests in `./property-test.sh`, `./test.sh 1000`, the TLA+ model and its mutants); run it before handing off, then use `sw` for what only the real window shows.
+- `./check.sh` runs every non-UI check in one go: build, SwiftLint (default rules, 120 columns, every Swift file), ruff with McCabe complexity on the Python, `zsh -n` on every script, cognitive complexity ≤ 15 via swift-complexity, `./unit-test.sh`, the property-based tests in `./property-test.sh`, `./test.sh 1000`, the TLA+ model, TLC checking traces of the real `Standup`, the Z3 geometry proofs, and the mutants that prove each of those can fail. Run it before handing off, then use `sw` for what only the real window shows.
 - Physics fairness and spin-length statistics come from `./test.sh` (headless, no UI); see `features/fairness-test.md`.
 - Flick-to-spin needs a real mouse drag (`sw flick`); see `features/spin.md`.
 - Keyboard Space-to-spin needs a real keystroke into a frontmost window; see `features/spin.md` for how and when to do that.
