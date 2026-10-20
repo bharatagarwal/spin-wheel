@@ -37,7 +37,9 @@ enum WheelRadii {
         let tip = slicesFromFirst(to: flapper.tip, wheelAngle: wheelAngle, slices: slices)
         let tipRestsOnAPeg = abs(tip - tip.rounded()) * 2 * .pi / Double(slices) < pegRadius / pegCircle
         let shown = tipRestsOnAPeg ? slicesFromFirst(to: armOverThePegTop(flapper), wheelAngle: wheelAngle, slices: slices) : tip
-        return min(Int(shown), slices - 1)
+        let slice = min(Int(shown), slices - 1)
+        assert((0..<slices).contains(slice), "slice \(slice) of \(slices)")
+        return slice
     }
 
     static func armOverThePegTop(_ flapper: FlapperPoints) -> YDownPoint {
@@ -60,7 +62,9 @@ struct WheelPose {
         let tip = WheelRadii.flapper(rootFromVertical: rootFromVertical, tipFromVertical: tipFromVertical).tip
         let intoSlice = WheelRadii.slicesFromFirst(to: tip, wheelAngle: clockwiseAngle, slices: oldSlices) - Double(old)
         let target = atan2(tip.y, tip.x) - (Double(new) + intoSlice) * 2 * .pi / Double(newSlices)
-        return clockwiseAngle + remainder(target - clockwiseAngle, 2 * .pi)
+        let turned = clockwiseAngle + remainder(target - clockwiseAngle, 2 * .pi)
+        assert(abs(turned - clockwiseAngle) <= .pi + 1e-9, "the wheel turns the short way")
+        return turned
     }
 }
 
@@ -178,6 +182,7 @@ struct WheelSim {
         holdFlapperWithinStops()
         stepWheel(contactTorque: contacts.torque)
         settle()
+        assert(stateIsPhysical, "\(self)")
         return contacts.impact
     }
 
@@ -276,21 +281,6 @@ struct WheelSim {
         tipFromVertical += tipRate * h
     }
 
-    private mutating func holdFlapperWithinStops() {
-        let p = params
-        if abs(rootFromVertical) > p.swingLimit {
-            let outward = rootFromVertical < 0 ? -1.0 : 1.0
-            rootFromVertical = outward * p.swingLimit
-            if rootRate * outward > 0 { rootRate = 0 }
-        }
-        let bend = tipFromVertical - rootFromVertical
-        if abs(bend) > p.bendLimit {
-            let outward = bend < 0 ? -1.0 : 1.0
-            tipFromVertical = rootFromVertical + outward * p.bendLimit
-            if (tipRate - rootRate) * outward > 0 { tipRate = rootRate }
-        }
-    }
-
     private mutating func stepWheel(contactTorque: Double) {
         let p = params
         let h = Self.step
@@ -339,6 +329,29 @@ struct WheelSim {
         }
         let held = if case .held = phase { true } else { false }
         if !held, time - releasedAt > 30 { phase = .stopped }
+    }
+}
+
+extension WheelSim {
+    fileprivate var stateIsPhysical: Bool {
+        let values = [clockwiseAngle, clockwiseSpeed, rootFromVertical, rootRate, tipFromVertical, tipRate, time]
+        return values.allSatisfy(\.isFinite)
+            && abs(rootFromVertical) <= params.swingLimit && abs(tipFromVertical - rootFromVertical) <= params.bendLimit + 1e-12
+    }
+
+    fileprivate mutating func holdFlapperWithinStops() {
+        let p = params
+        if abs(rootFromVertical) > p.swingLimit {
+            let outward = rootFromVertical < 0 ? -1.0 : 1.0
+            rootFromVertical = outward * p.swingLimit
+            if rootRate * outward > 0 { rootRate = 0 }
+        }
+        let bend = tipFromVertical - rootFromVertical
+        if abs(bend) > p.bendLimit {
+            let outward = bend < 0 ? -1.0 : 1.0
+            tipFromVertical = rootFromVertical + outward * p.bendLimit
+            if (tipRate - rootRate) * outward > 0 { tipRate = rootRate }
+        }
     }
 }
 

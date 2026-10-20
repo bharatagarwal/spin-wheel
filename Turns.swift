@@ -46,9 +46,20 @@ struct Team {
 }
 
 struct TurnOrder {
-    private(set) var order: [Name] = []
-    private(set) var done: Set<Name> = []
-    private(set) var wheel: [Name] = []
+    private(set) var order: [Name] = [] {
+        didSet { assert(invariantsHold) }
+    }
+    private(set) var done: Set<Name> = [] {
+        didSet { assert(invariantsHold) }
+    }
+    private(set) var wheel: [Name] = [] {
+        didSet { assert(invariantsHold) }
+    }
+
+    var invariantsHold: Bool {
+        Set(order).count == order.count && Set(wheel).count == wheel.count
+            && Set(wheel).isSubset(of: order) && done.isSubset(of: order)
+    }
 
     init(shuffling names: [Name] = []) {
         order = names.shuffled()
@@ -58,26 +69,30 @@ struct TurnOrder {
     var waiting: [Name] { order.filter { !done.contains($0) } }
 
     mutating func add(_ name: Name) {
+        assert(!order.contains(name), "\(name) is already in the turn order")
         order.append(name)
         wheel.append(name)
     }
 
     mutating func addForNextSpin(_ name: Name) {
+        assert(!order.contains(name), "\(name) is already in the turn order")
         order.append(name)
     }
 
     mutating func remove(_ name: Name) {
-        order.removeAll { $0 == name }
-        wheel.removeAll { $0 == name }
         done.remove(name)
+        wheel.removeAll { $0 == name }
+        order.removeAll { $0 == name }
     }
 
     mutating func beginSpin() -> [Name] {
+        assert(!waiting.isEmpty, "a spin needs someone waiting")
         wheel = waiting
         return wheel
     }
 
     mutating func markDone(_ name: Name) {
+        assert(wheel.contains(name) && !done.contains(name), "\(name) must be a slice who hasn't had a turn")
         done.insert(name)
     }
 }

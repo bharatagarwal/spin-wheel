@@ -27,7 +27,7 @@ if [[ ! -f $BUILD/libPropertyBased.a ]]; then
         -emit-module -emit-library -static -module-name PropertyBased -F $FRAMEWORKS -plugin-path $TESTING_PLUGINS \
         -emit-module-path $BUILD/PropertyBased.swiftmodule -o $BUILD/libPropertyBased.a $PB_DIR/src/Sources/PropertyBased/*.swift
 fi
-swiftc -O -enable-testing -parse-as-library -target $TARGET \
+swiftc -O -assert-config Debug -enable-testing -parse-as-library -target $TARGET \
     -emit-module -emit-library -static -module-name HotPotatoCore \
     -emit-module-path $BUILD/HotPotatoCore.swiftmodule -o $BUILD/libHotPotatoCore.a Physics.swift Turns.swift
 swiftc -O -swift-version 6 -target $TARGET -I $BUILD -L $BUILD -lPropertyBased -lHotPotatoCore \
