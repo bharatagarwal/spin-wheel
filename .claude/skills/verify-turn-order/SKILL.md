@@ -19,6 +19,9 @@ Each property: the promise, then what the user would see if it broke.
 | `WheelFrozenWhileSpinning` | While the wheel turns, the slices drawn are the slices simulated. | The wheel redraws as it stops and the flapper points at the wrong name (this happened with a mid-spin add before `706a41e`'s fix). |
 | `NoDuplicateSlices` | No name has two slices. | One person gets double odds. |
 | `NotPickedWhileHeld` | A spin is decided only after the user lets go. | Holding the wheel chooses the winner. |
+| `SpinsEnd` (liveness) | Every spin that starts ends with a winner, as long as the user eventually lets go of the wheel (`UserLetsGo`) and a coasting wheel eventually comes to rest (`WheelComesToRest`, backed by friction and the 30 s cap). | The wheel never stops, or stays locked in a spin. |
+
+`SpinsEnd` is checked under `FairSpec`, which adds those two fairness assumptions to `Spec`. The model does not promise that everyone eventually gets a turn: nobody has to press Spin, and Add, Remove and Reset can restart a round forever. TLC finds such a behaviour for that property even under `FairSpec`.
 
 ## Findings
 

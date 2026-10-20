@@ -11,7 +11,9 @@ if [[ ! -f $JAR ]]; then
 fi
 [[ $(shasum -a 256 $JAR | cut -d' ' -f1) == $TLC_SHA256 ]] || { print "tla2tools.jar checksum mismatch"; exit 2 }
 
-ALL=(PickedFromTeam PickedOnce BannerOnWheel WheelFrozenWhileSpinning NoDuplicateSlices NotPickedWhileHeld)
+INVARIANTS=(PickedFromTeam PickedOnce BannerOnWheel WheelFrozenWhileSpinning NoDuplicateSlices NotPickedWhileHeld)
+LIVENESS=(SpinsEnd)
+ALL=($INVARIANTS $LIVENESS)
 KNOWN_FINDINGS=()
 props=(${@:-$ALL})
 out=${HERE:h}/.verify/tla; mkdir -p $out
@@ -19,13 +21,21 @@ rc=0
 for p in $props; do
     work=$out/$p; rm -r -f $work; mkdir -p $work
     cp $SPEC_DIR/TurnOrder.tla $SPEC_DIR/MC.tla $work/
+    if (( ${LIVENESS[(Ie)$p]} )); then
+        check="SPECIFICATION FairSpec
+PROPERTY $p"
+        violation="Temporal properties were violated"
+    else
+        check="SPECIFICATION Spec
+INVARIANT $p"
+        violation="Invariant $p is violated"
+    fi
     cat > $work/MC.cfg <<CFG
 CONSTANTS
     Names <- MCNames
     InitialTeam <- MCInitialTeam
     None = None
-SPECIFICATION Spec
-INVARIANT $p
+$check
 CFG
     if (cd $work && java -XX:+UseParallelGC -cp $JAR tlc2.TLC -workers auto -metadir states MC.tla > $out/$p.log 2>&1); then
         result=pass
@@ -40,7 +50,7 @@ CFG
         [[ $result == pass ]] || rc=1
     fi
     if [[ $result == FAIL ]]; then
-        grep -q "Error: Invariant $p is violated" $out/$p.log || { print "  TLC did not finish cleanly; see $out/$p.log"; rc=2; }
+        grep -q "Error: $violation" $out/$p.log || { print "  TLC did not finish cleanly; see $out/$p.log"; rc=2; }
         print "  trace: $out/$p.log"
     fi
 done

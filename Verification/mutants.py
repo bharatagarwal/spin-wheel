@@ -26,6 +26,10 @@ MUTANTS = [
     Mutant("NotPickedWhileHeld", "WheelSim.settle() applies the 30 s cap while .held again",
      'Stop == phase = "spinning" /\\ motion = "coasting" /\\ Finish',
      'Stop == phase = "spinning" /\\ motion \\in {"held", "coasting"} /\\ Finish'),
+    Mutant("SpinsEnd", "WheelSim.settle() loses both the friction stop and the 30 s cap, so a coasting wheel may turn forever",
+     "FairSpec == Spec /\\ UserLetsGo /\\ WheelComesToRest\n", "FairSpec == Spec /\\ UserLetsGo\n"),
+    Mutant("SpinsEnd", "a held wheel never has to be let go (no release on drag end or cancel)",
+     "FairSpec == Spec /\\ UserLetsGo /\\ WheelComesToRest\n", "FairSpec == Spec /\\ WheelComesToRest\n"),
 ]
 
 missed = 0
@@ -40,7 +44,8 @@ for m in MUTANTS:
         r = subprocess.run(["zsh", str(here / "check.sh"), m.prop], capture_output=True, text=True,
                            env={**os.environ, "TURNORDER_SPEC_DIR": tmp})
         log = (here.parent / ".verify/tla" / f"{m.prop}.log").read_text()
-        caught = r.returncode == 1 and f"Invariant {m.prop} is violated" in log
+        violation = "Temporal properties were violated" if m.prop == "SpinsEnd" else f"Invariant {m.prop} is violated"
+        caught = r.returncode == 1 and violation in log
         print(f"{'caught' if caught else 'MISSED'}  {m.prop}: {m.code_change}")
         missed += not caught
 sys.exit(1 if missed else 0)

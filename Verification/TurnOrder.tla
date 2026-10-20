@@ -94,6 +94,12 @@ Next ==
 
 Spec == Init /\ [][Next]_vars
 
+UserLetsGo == WF_vars(Release)
+
+WheelComesToRest == WF_vars(Stop)
+
+FairSpec == Spec /\ UserLetsGo /\ WheelComesToRest
+
 -----------------------------------------------------------------------------
 PickedFromTeam == pickRecordForProperties = None \/ pickRecordForProperties.onTeam
 
@@ -106,4 +112,6 @@ WheelFrozenWhileSpinning == phase = "spinning" => wheel = slices
 NoDuplicateSlices == Len(wheel) = Cardinality(Range(wheel))
 
 NotPickedWhileHeld == pickRecordForProperties = None \/ ~pickRecordForProperties.held
+
+SpinsEnd == phase = "spinning" ~> phase = "idle"
 =============================================================================
