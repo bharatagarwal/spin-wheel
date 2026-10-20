@@ -1,7 +1,20 @@
 import Foundation
 
+struct Name: Hashable, CustomStringConvertible {
+    let text: String
+
+    init?(_ typed: some StringProtocol) {
+        text = String(typed).filter { !$0.unicodeScalars.allSatisfy(\.properties.isDefaultIgnorableCodePoint) }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        if text.isEmpty { return nil }
+    }
+
+    var description: String { text }
+}
+
 struct Team {
-    private(set) var names: [String]
+    private(set) var names: [Name] = []
 
     static let previousApps = ["local.yourturn", "local.spinwheel"].compactMap(UserDefaults.init(suiteName:))
 
@@ -9,69 +22,62 @@ struct Team {
         let saved = defaults.string(forKey: "names")
             ?? previous.lazy.compactMap { $0.string(forKey: "names") }.first
             ?? "Alice\nBob\nCharlie\nDana"
-        var team = Team(names: [])
-        for name in saved.split(whereSeparator: \.isNewline) {
-            _ = team.add(String(name))
+        var team = Team()
+        for line in saved.split(whereSeparator: \.isNewline) {
+            _ = team.add(line)
         }
         team.save(to: defaults)
         return team
     }
 
     func save(to defaults: UserDefaults = .standard) {
-        defaults.set(names.joined(separator: "\n"), forKey: "names")
+        defaults.set(names.map(\.text).joined(separator: "\n"), forKey: "names")
     }
 
-    static func cleaned(_ typed: String) -> String {
-        typed.filter { !$0.unicodeScalars.allSatisfy(\.properties.isDefaultIgnorableCodePoint) }
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-    }
-
-    mutating func add(_ typed: String) -> String? {
-        let name = Self.cleaned(typed)
-        guard !name.isEmpty, !names.contains(name) else { return nil }
+    mutating func add(_ typed: some StringProtocol) -> Name? {
+        guard let name = Name(typed), !names.contains(name) else { return nil }
         names.append(name)
         return name
     }
 
-    mutating func remove(_ name: String) {
+    mutating func remove(_ name: Name) {
         names.removeAll { $0 == name }
     }
 }
 
 struct TurnOrder {
-    private(set) var order: [String] = []
-    private(set) var done: Set<String> = []
-    private(set) var wheel: [String] = []
+    private(set) var order: [Name] = []
+    private(set) var done: Set<Name> = []
+    private(set) var wheel: [Name] = []
 
-    init(shuffling names: [String] = []) {
+    init(shuffling names: [Name] = []) {
         order = names.shuffled()
         wheel = order
     }
 
-    var waiting: [String] { order.filter { !done.contains($0) } }
+    var waiting: [Name] { order.filter { !done.contains($0) } }
 
-    mutating func add(_ name: String) {
+    mutating func add(_ name: Name) {
         order.append(name)
         wheel.append(name)
     }
 
-    mutating func addForNextSpin(_ name: String) {
+    mutating func addForNextSpin(_ name: Name) {
         order.append(name)
     }
 
-    mutating func remove(_ name: String) {
+    mutating func remove(_ name: Name) {
         order.removeAll { $0 == name }
         wheel.removeAll { $0 == name }
         done.remove(name)
     }
 
-    mutating func beginSpin() -> [String] {
+    mutating func beginSpin() -> [Name] {
         wheel = waiting
         return wheel
     }
 
-    mutating func markDone(_ name: String) {
+    mutating func markDone(_ name: Name) {
         done.insert(name)
     }
 }

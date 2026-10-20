@@ -8,12 +8,34 @@ let awkwardCharacters = [
 ]
 let typedName = Gen.element(of: awkwardCharacters).map { $0 ?? "" }.array(of: 0...5).map { $0.joined() }
 
-func looks(_ name: String) -> String {
-    let shown = name.unicodeScalars.compactMap { scalar -> Character? in
+func looks(_ typed: String) -> String {
+    let shown = typed.unicodeScalars.compactMap { scalar -> Character? in
         if scalar.properties.isWhitespace { return " " }
         return scalar.properties.isDefaultIgnorableCodePoint && scalar != "\u{200D}" ? nil : Character(scalar)
     }
     return String(shown).split(separator: " ").joined(separator: " ").precomposedStringWithCanonicalMapping
+}
+
+@Test func aNameIsWhatWasTypedAsItLooks() async {
+    await propertyCheck(count: 1000, input: typedName) { typed in
+        let name = Name(typed)
+        #expect((name == nil) == looks(typed).isEmpty, "typed \(typed.debugDescription)")
+        if let name { #expect(looks(name.text) == looks(typed), "typed \(typed.debugDescription), kept \(name.text.debugDescription)") }
+    }
+}
+
+@Test func cleaningANameAgainChangesNothing() async {
+    await propertyCheck(count: 1000, input: typedName) { typed in
+        guard let name = Name(typed) else { return }
+        #expect(Name(name.text) == name && Name(name.text)?.text == name.text, "\(name.text.debugDescription)")
+    }
+}
+
+@Test func twoTypedNamesAreOnePersonExactlyWhenTheyLookTheSame() async {
+    await propertyCheck(count: 2000, input: typedName, typedName) { first, second in
+        guard let a = Name(first), let b = Name(second) else { return }
+        #expect((a == b) == (looks(first) == looks(second)), "\(first.debugDescription) and \(second.debugDescription)")
+    }
 }
 
 @Test func aSavedTeamLoadsBackUnchanged() async {
@@ -26,27 +48,28 @@ func looks(_ name: String) -> String {
     }
 }
 
-@Test func everyNameHasSomethingVisibleInIt() async {
-    await propertyCheck(count: 1000, input: typedName) { typed in
-        var team = Team(names: [])
-        guard let name = team.add(typed) else { return }
-        #expect(!looks(name).isEmpty, "\(name.unicodeScalars.map { "U+" + String($0.value, radix: 16, uppercase: true) })")
+struct TeamSavedBeforeNamesWereCleaned {
+    var names: [String] = []
+
+    mutating func add(_ typed: String) {
+        let name = typed.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, !names.contains(name) else { return }
+        names.append(name)
     }
+
+    var saved: String { names.joined(separator: "\n") }
 }
 
-@Test func namesThatLookTheSameAreOnePerson() async {
-    await propertyCheck(count: 1000, input: typedName.array(of: 2...4)) { typed in
-        var team = Team(names: [])
-        for name in typed { _ = team.add(name) }
-        let shown = team.names.map(looks)
-        #expect(shown.count == Set(shown).count, "\(team.names.map(\.debugDescription))")
-    }
-}
-
-@Test func aNameIsShownAsItWasTyped() async {
-    await propertyCheck(count: 1000, input: typedName) { typed in
-        var team = Team(names: [])
-        guard let name = team.add(typed) else { return }
-        #expect(looks(name) == looks(typed), "typed \(typed.debugDescription), kept \(name.debugDescription)")
+@Test func aTeamSavedByTheOldVersionLoadsWithEveryLineKept() async {
+    await propertyCheck(count: 1000, input: typedName.array(of: 0...6)) { typed in
+        var old = TeamSavedBeforeNamesWereCleaned()
+        for name in typed { old.add(name) }
+        let defaults = scratchDefaults()
+        defaults.set(old.saved, forKey: "names")
+        var expected: [Name] = []
+        for line in old.names.flatMap({ $0.split(whereSeparator: \.isNewline) }) {
+            if let name = Name(line), !expected.contains(name) { expected.append(name) }
+        }
+        #expect(Team.load(from: defaults, orFrom: []).names == expected, "old save \(old.saved.debugDescription)")
     }
 }

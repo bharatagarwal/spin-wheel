@@ -17,6 +17,6 @@ func scratchDefaults() -> UserDefaults {
     UserDefaults(suiteName: "hotpotato.properties.\(UUID().uuidString)")!
 }
 
-func sliceUnderResting(flapperOver wheel: [String], at clockwiseAngle: Double) -> String {
+func sliceUnderResting(flapperOver wheel: [Name], at clockwiseAngle: Double) -> Name {
     wheel[WheelSim(slices: wheel.count, clockwiseAngle: clockwiseAngle).winner]
 }

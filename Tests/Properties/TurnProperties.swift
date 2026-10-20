@@ -33,8 +33,8 @@ struct Standup {
     var team = Team.load(from: scratchDefaults(), orFrom: [])
     var turns = TurnOrder()
     var pose = WheelPose()
-    var announced: String?
-    var winnersThisRound: [String] = []
+    var announced: Name?
+    var winnersThisRound: [Name] = []
 
     init() {
         turns = TurnOrder(shuffling: team.names)
@@ -55,7 +55,8 @@ struct Standup {
     mutating func apply(_ action: Action) {
         switch action {
         case .add(let name): add(name, spinning: false)
-        case .remove(let name):
+        case .remove(let typed):
+            guard let name = Name(typed) else { return }
             team.remove(name)
             keepingTheWinnerUnderTheFlapper { $0.remove(name) }
             winnersThisRound.removeAll { $0 == name }

@@ -39,7 +39,7 @@ final class SpinSession {
         case finished
     }
 
-    let slices: [String]
+    let slices: [Name]
     private(set) var released = Date()
     private var sim: WheelSim
     private var motion = Motion.finished
@@ -47,7 +47,7 @@ final class SpinSession {
     private let onImpact: (WheelSim.Impact) -> Void
     private let onStop: (WheelSim) -> Void
 
-    init(slices: [String], clockwiseAngle: Double,
+    init(slices: [Name], clockwiseAngle: Double,
          onFrame: @escaping (WheelSim, _ held: Bool) -> Void,
          onImpact: @escaping (WheelSim.Impact) -> Void,
          onStop: @escaping (WheelSim) -> Void) {
@@ -115,8 +115,8 @@ final class SpinSession {
 struct SpinLog {
     let path: String
 
-    func record(_ session: SpinSession, winner: String, simTime: Double) {
-        let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", session.slices.count, winner, simTime, Date().timeIntervalSince(session.released))
+    func record(_ session: SpinSession, winner: Name, simTime: Double) {
+        let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", session.slices.count, winner.text, simTime, Date().timeIntervalSince(session.released))
         if let h = FileHandle(forWritingAtPath: path) ?? (FileManager.default.createFile(atPath: path, contents: nil) ? FileHandle(forWritingAtPath: path) : nil) {
             h.seekToEndOfFile()
             h.write(line.data(using: .utf8)!)
@@ -127,7 +127,7 @@ struct SpinLog {
 
 final class Model: ObservableObject {
     enum Phase {
-        case idle(winner: String?)
+        case idle(winner: Name?)
         case spinning(SpinSession)
     }
 
@@ -148,7 +148,7 @@ final class Model: ObservableObject {
         if case .spinning = phase { true } else { false }
     }
 
-    var winner: String? {
+    var winner: Name? {
         if case .idle(let winner) = phase { winner } else { nil }
     }
 
@@ -215,7 +215,7 @@ final class Model: ObservableObject {
         newName = ""
     }
 
-    func remove(_ name: String) {
+    func remove(_ name: Name) {
         guard case .idle(let winner) = phase else { return }
         team.remove(name)
         keepingTheWinnerUnderTheFlapper { turns.remove(name) }

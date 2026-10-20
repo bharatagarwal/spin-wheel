@@ -43,13 +43,13 @@ struct WheelColumn: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            WheelAssembly(names: m.turns.wheel, pose: m.pose, onDrag: m.drag(to:at:), onRelease: m.release)
+            WheelAssembly(names: m.turns.wheel.map(\.text), pose: m.pose, onDrag: m.drag(to:at:), onRelease: m.release)
                 .accessibilityElement()
                 .accessibilityIdentifier("wheel")
                 .accessibilityValue(m.spinning ? "spinning" : "idle")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { m.spin() }
-                .overlay { WinnerBanner(winner: m.winner) }
+                .overlay { WinnerBanner(winner: m.winner?.text) }
                 .scaleEffect(1 + 0.06 * m.focus)
                 .zIndex(1)
                 .onTapGesture { m.spin() }
@@ -97,7 +97,7 @@ struct TeamPanel: View {
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(m.team.names, id: \.self) { name in
-                        MemberRow(name: name, done: m.turns.done.contains(name), removable: !m.spinning) { m.remove(name) }
+                        MemberRow(name: name.text, done: m.turns.done.contains(name), removable: !m.spinning) { m.remove(name) }
                     }
                 }
             }
