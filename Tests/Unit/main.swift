@@ -1,8 +1,8 @@
 import Foundation
 
 var failures = 0
-func expect(_ ok: Bool, _ what: String, line: Int = #line) {
-    if !ok { failures += 1; print("FAIL  line \(line): \(what)") }
+func expect(_ holds: Bool, _ what: String, line: Int = #line) {
+    if !holds { failures += 1; print("FAIL  line \(line): \(what)") }
 }
 
 func names(_ typed: String...) -> [Name] { typed.compactMap(Name.init) }

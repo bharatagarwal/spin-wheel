@@ -33,8 +33,8 @@ func looks(_ typed: String) -> String {
 
 @Test func twoTypedNamesAreOnePersonExactlyWhenTheyLookTheSame() async {
     await propertyCheck(count: 2000, input: typedName, typedName) { first, second in
-        guard let a = Name(first), let b = Name(second) else { return }
-        #expect((a == b) == (looks(first) == looks(second)), "\(first.debugDescription) and \(second.debugDescription)")
+        guard let firstName = Name(first), let secondName = Name(second) else { return }
+        #expect((firstName == secondName) == (looks(first) == looks(second)), "\(first.debugDescription) and \(second.debugDescription)")
     }
 }
 

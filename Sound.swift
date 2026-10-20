@@ -18,10 +18,10 @@ final class Sound {
         ticks = (0..<6).map { _ in makeTick() }
         reveal = makeChime()
         for _ in 0..<8 {
-            let p = AVAudioPlayerNode()
-            engine.attach(p)
-            engine.connect(p, to: engine.mainMixerNode, format: format)
-            players.append(p)
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+            players.append(player)
         }
         engine.mainMixerNode.outputVolume = 0.8
         try? engine.start()
@@ -44,22 +44,22 @@ final class Sound {
 
     private func play(_ buffer: AVAudioPCMBuffer, volume: Float, rate: Double, at when: AVAudioTime? = nil) {
         if !engine.isRunning { try? engine.start() }
-        let p = players[next]
+        let player = players[next]
         next = (next + 1) % players.count
-        p.stop()
-        p.volume = volume
-        p.rate = Float(rate)
-        p.scheduleBuffer(buffer, at: when)
-        p.play()
+        player.stop()
+        player.volume = volume
+        player.rate = Float(rate)
+        player.scheduleBuffer(buffer, at: when)
+        player.play()
     }
 
     private func buffer(seconds: Double, _ sample: (Double) -> Double) -> AVAudioPCMBuffer {
-        let n = AVAudioFrameCount(seconds * format.sampleRate)
-        let b = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: n)!
-        b.frameLength = n
-        let data = b.floatChannelData![0]
-        for i in 0..<Int(n) { data[i] = Float(sample(Double(i) / format.sampleRate)) }
-        return b
+        let frames = AVAudioFrameCount(seconds * format.sampleRate)
+        let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        pcm.frameLength = frames
+        let data = pcm.floatChannelData![0]
+        for frame in 0..<Int(frames) { data[frame] = Float(sample(Double(frame) / format.sampleRate)) }
+        return pcm
     }
 
     private func makeTick() -> AVAudioPCMBuffer {
@@ -71,34 +71,34 @@ final class Sound {
             Mode(freq: 2150 * jitter(), decay: 0.005, gain: 0.25),
             Mode(freq: 3400 * jitter(), decay: 0.003, gain: 0.12),
         ]
-        let fs = format.sampleRate
+        let sampleRate = format.sampleRate
         var state = modes.map { _ in (0.0, 0.0) }
         var raw: [Double] = []
-        for i in 0..<Int(0.06 * fs) {
-            let t = Double(i) / fs
-            let strike = t < 0.002 ? Double.random(in: -1...1) * (1 - t / 0.002) : 0
-            var y = 0.0
-            for (k, m) in modes.enumerated() {
-                let r = exp(-1 / (m.decay * fs))
-                let w = 2 * .pi * m.freq / fs
-                let out = 2 * r * cos(w) * state[k].0 - r * r * state[k].1 + strike * (1 - r)
-                state[k] = (out, state[k].0)
-                y += out * m.gain
+        for sampleIndex in 0..<Int(0.06 * sampleRate) {
+            let time = Double(sampleIndex) / sampleRate
+            let strike = time < 0.002 ? Double.random(in: -1...1) * (1 - time / 0.002) : 0
+            var mixed = 0.0
+            for (index, mode) in modes.enumerated() {
+                let damping = exp(-1 / (mode.decay * sampleRate))
+                let angularStep = 2 * .pi * mode.freq / sampleRate
+                let out = 2 * damping * cos(angularStep) * state[index].0 - damping * damping * state[index].1 + strike * (1 - damping)
+                state[index] = (out, state[index].0)
+                mixed += out * mode.gain
             }
-            raw.append(y)
+            raw.append(mixed)
         }
         let peak = raw.map(abs).max() ?? 1
-        return buffer(seconds: 0.06) { t in raw[min(raw.count - 1, Int(t * fs))] / peak }
+        return buffer(seconds: 0.06) { time in raw[min(raw.count - 1, Int(time * sampleRate))] / peak }
     }
 
     private func makeChime() -> AVAudioPCMBuffer {
-        func bell(_ f: Double, _ t: Double) -> Double {
-            guard t >= 0 else { return 0 }
-            let attack = min(1, t / 0.004)
-            return attack * (sin(2 * .pi * f * t) * exp(-t * 3.2)
-                + 0.4 * sin(2 * .pi * f * 2.76 * t) * exp(-t * 7)
-                + 0.15 * sin(2 * .pi * f * 5.4 * t) * exp(-t * 12))
+        func bell(_ frequency: Double, _ time: Double) -> Double {
+            guard time >= 0 else { return 0 }
+            let attack = min(1, time / 0.004)
+            return attack * (sin(2 * .pi * frequency * time) * exp(-time * 3.2)
+                + 0.4 * sin(2 * .pi * frequency * 2.76 * time) * exp(-time * 7)
+                + 0.15 * sin(2 * .pi * frequency * 5.4 * time) * exp(-time * 12))
         }
-        return buffer(seconds: 1.6) { t in 0.3 * (bell(659.25, t) + bell(987.77, t - 0.12)) }
+        return buffer(seconds: 1.6) { time in 0.3 * (bell(659.25, time) + bell(987.77, time - 0.12)) }
     }
 }

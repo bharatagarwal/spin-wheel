@@ -56,7 +56,7 @@ final class SpinSession: Spinning {
         self.onFrame = onFrame
         self.onImpact = onImpact
         self.onStop = onStop
-        motion = .coasting(Ticker { [weak self] dt in self?.frame(dt) })
+        motion = .coasting(Ticker { [weak self] elapsed in self?.frame(elapsed) })
     }
 
     func push(_ clockwiseSpeed: Double) {
@@ -71,38 +71,38 @@ final class SpinSession: Spinning {
     }
 
     func drag(to angle: Double, at time: Date) {
-        guard case .held(var g, let ticker) = motion else { return }
-        let delta = remainder(angle - g.fingerAngle, 2 * .pi)
-        g.fingerAngle += delta
-        g.target += delta
-        g.samples.append((time, g.fingerAngle))
-        g.samples.removeAll { time.timeIntervalSince($0.time) > 0.1 }
-        motion = .held(g, ticker)
+        guard case .held(var grip, let ticker) = motion else { return }
+        let delta = remainder(angle - grip.fingerAngle, 2 * .pi)
+        grip.fingerAngle += delta
+        grip.target += delta
+        grip.samples.append((time, grip.fingerAngle))
+        grip.samples.removeAll { time.timeIntervalSince($0.time) > 0.1 }
+        motion = .held(grip, ticker)
     }
 
     func release(using rng: inout some RandomNumberGenerator) {
-        guard case .held(let g, let ticker) = motion else { return }
+        guard case .held(let grip, let ticker) = motion else { return }
         motion = .coasting(ticker)
         var flick = 0.0
-        if let first = g.samples.first, let last = g.samples.last, last.time > first.time {
+        if let first = grip.samples.first, let last = grip.samples.last, last.time > first.time {
             flick = (last.angle - first.angle) / last.time.timeIntervalSince(first.time)
         }
         push(flickVelocity(flick, using: &rng))
     }
 
-    private func frame(_ dt: Double) {
-        let dt = min(dt, 1.0 / 20)
+    private func frame(_ elapsed: Double) {
+        let frameTime = min(elapsed, 1.0 / 20)
         let ticker: Ticker
         switch motion {
-        case .held(let grip, let t):
-            sim.drive((grip.target - sim.clockwiseAngle) / max(dt, 1.0 / 240))
-            ticker = t
-        case .coasting(let t):
-            ticker = t
+        case .held(let grip, let running):
+            sim.drive((grip.target - sim.clockwiseAngle) / max(frameTime, 1.0 / 240))
+            ticker = running
+        case .coasting(let running):
+            ticker = running
         case .finished:
             return
         }
-        sim.advance(dt, onImpact: onImpact)
+        sim.advance(frameTime, onImpact: onImpact)
         let held = if case .held = motion { true } else { false }
         onFrame(sim, held)
         guard sim.stopped else { return }
@@ -117,10 +117,10 @@ struct SpinLog {
 
     func record(_ session: SpinSession, winner: Name, simTime: Double) {
         let line = String(format: "spin slices=%d winner=%@ sim=%.2fs wall=%.2fs\n", session.slices.count, winner.text, simTime, Date().timeIntervalSince(session.released))
-        if let h = FileHandle(forWritingAtPath: path) ?? (FileManager.default.createFile(atPath: path, contents: nil) ? FileHandle(forWritingAtPath: path) : nil) {
-            h.seekToEndOfFile()
-            h.write(line.data(using: .utf8)!)
-            try? h.close()
+        if let handle = FileHandle(forWritingAtPath: path) ?? (FileManager.default.createFile(atPath: path, contents: nil) ? FileHandle(forWritingAtPath: path) : nil) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            try? handle.close()
         }
     }
 }

@@ -38,8 +38,8 @@ struct Decision {
     var named: Named?
     var outcome: Outcome
 
-    func covers(_ c: Case) -> Bool {
-        (act ?? c.act) == c.act && (phase ?? c.phase) == c.phase && (waiting ?? c.waiting) == c.waiting && (named ?? c.named) == c.named
+    func covers(_ situation: Case) -> Bool {
+        (act ?? situation.act) == situation.act && (phase ?? situation.phase) == situation.phase && (waiting ?? situation.waiting) == situation.waiting && (named ?? situation.named) == situation.named
     }
 }
 
@@ -68,9 +68,9 @@ let everyCase = Act.allCases.flatMap { act in
 }
 
 @Test func everyCaseHasExactlyOneDecision() {
-    for c in everyCase {
-        let matching = decisions.filter { $0.covers(c) }
-        #expect(matching.count == 1, "\(c): \(matching.map(\.outcome))")
+    for situation in everyCase {
+        let matching = decisions.filter { $0.covers(situation) }
+        #expect(matching.count == 1, "\(situation): \(matching.map(\.outcome))")
     }
 }
 

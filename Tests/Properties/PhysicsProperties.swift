@@ -15,11 +15,11 @@ struct Watch {
     }
 }
 
-func distance(from p: YDownPoint, toSegmentFrom a: YDownPoint, to b: YDownPoint) -> Double {
-    let abx = b.x - a.x, aby = b.y - a.y
-    let s = min(max(((p.x - a.x) * abx + (p.y - a.y) * aby) / (abx * abx + aby * aby), 0), 1)
-    let dx = p.x - (a.x + s * abx), dy = p.y - (a.y + s * aby)
-    return (dx * dx + dy * dy).squareRoot()
+func distance(from point: YDownPoint, toSegmentFrom start: YDownPoint, to end: YDownPoint) -> Double {
+    let abx = end.x - start.x, aby = end.y - start.y
+    let along = min(max(((point.x - start.x) * abx + (point.y - start.y) * aby) / (abx * abx + aby * aby), 0), 1)
+    let offsetX = point.x - (start.x + along * abx), offsetY = point.y - (start.y + along * aby)
+    return (offsetX * offsetX + offsetY * offsetY).squareRoot()
 }
 
 func overlap(_ sim: WheelSim) -> Double {
@@ -27,8 +27,8 @@ func overlap(_ sim: WheelSim) -> Double {
     let segment = 2 * Double.pi / Double(sim.slices)
     let pointer = -Double.pi / 2 - sim.clockwiseAngle
     let near = Int(floor((pointer - 0.5) / segment))...Int(ceil((pointer + 0.5) / segment))
-    return near.map { i in
-        let peg = WheelRadii.peg(i, of: sim.slices, wheelAngle: sim.clockwiseAngle)
+    return near.map { index in
+        let peg = WheelRadii.peg(index, of: sim.slices, wheelAngle: sim.clockwiseAngle)
         let gap = min(distance(from: peg, toSegmentFrom: flapper.pivot, to: flapper.joint),
                       distance(from: peg, toSegmentFrom: flapper.joint, to: flapper.tip))
         return WheelRadii.pegRadius + WheelRadii.armRadius - gap
@@ -148,8 +148,8 @@ struct Drag: Sendable, CustomStringConvertible {
 func sliceBetweenPegs(around point: YDownPoint, of slices: Int, wheelAngle: Double) -> Int {
     let segment = 2 * Double.pi / Double(slices)
     let inWheelFrame = atan2(point.y, point.x) - wheelAngle
-    return (0..<slices).first { i in
-        let fromPeg = remainder(inWheelFrame - Double(i) * segment, 2 * .pi)
+    return (0..<slices).first { index in
+        let fromPeg = remainder(inWheelFrame - Double(index) * segment, 2 * .pi)
         return fromPeg >= 0 && fromPeg < segment
     } ?? slices - 1
 }
