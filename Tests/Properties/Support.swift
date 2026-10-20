@@ -13,8 +13,16 @@ struct SplitMix64: RandomNumberGenerator {
     }
 }
 
-func scratchDefaults() -> UserDefaults {
-    UserDefaults(suiteName: "hotpotato.properties.\(UUID().uuidString)")!
+final class StoreInMemory: NamesStore {
+    private var values: [String: Any] = [:]
+
+    func string(forKey key: String) -> String? { values[key] as? String }
+
+    func set(_ value: Any?, forKey key: String) { values[key] = value }
+}
+
+func defaultTeam() -> Team {
+    Team.load(from: StoreInMemory(), orFrom: [])
 }
 
 func sliceUnderResting(flapperOver wheel: [Name], at clockwiseAngle: Double) -> Name {

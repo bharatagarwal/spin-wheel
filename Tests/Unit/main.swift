@@ -7,31 +7,37 @@ func expect(_ holds: Bool, _ what: String, line: Int = #line) {
 
 func names(_ typed: String...) -> [Name] { typed.compactMap(Name.init) }
 
-func scratchDefaults(_ names: String?) -> UserDefaults {
-    let suite = "hotpotato.unit-tests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    if let names { defaults.set(names, forKey: "names") }
-    return defaults
+final class StoreInMemory: NamesStore {
+    private var values: [String: Any] = [:]
+
+    func string(forKey key: String) -> String? { values[key] as? String }
+
+    func set(_ value: Any?, forKey key: String) { values[key] = value }
+}
+
+func store(saving names: String?) -> StoreInMemory {
+    let store = StoreInMemory()
+    if let names { store.set(names, forKey: "names") }
+    return store
 }
 
 do {
-    let defaults = scratchDefaults("Ana\n Ben \nAna\n\nCy\nBen")
-    let team = Team.load(from: defaults, orFrom: [])
+    let saved = store(saving: "Ana\n Ben \nAna\n\nCy\nBen")
+    let team = Team.load(from: saved, orFrom: [])
     expect(team.names.map(\.text) == ["Ana", "Ben", "Cy"],
            "load drops duplicate and blank saved names, got \(team.names)")
-    expect(defaults.string(forKey: "names") == "Ana\nBen\nCy", "load writes the cleaned list back")
+    expect(saved.string(forKey: "names") == "Ana\nBen\nCy", "load writes the cleaned list back")
 }
 
 do {
-    let previous = scratchDefaults("Old\nNames")
-    let team = Team.load(from: scratchDefaults(nil), orFrom: [scratchDefaults(nil), previous])
+    let previous = store(saving: "Old\nNames")
+    let team = Team.load(from: store(saving: nil), orFrom: [store(saving: nil), previous])
     expect(team.names.map(\.text) == ["Old", "Names"],
            "load migrates from the first previous app that has names, got \(team.names)")
 }
 
 do {
-    var team = Team.load(from: scratchDefaults("Ana"), orFrom: [])
+    var team = Team.load(from: store(saving: "Ana"), orFrom: [])
     expect(team.add("Ana") == nil, "add rejects a duplicate")
     expect(team.add(" \u{200B}\n") == nil, "add rejects a name with nothing visible in it")
     expect(team.add(" Ben\r\n Cy ")?.text == "Ben Cy" && team.names.map(\.text) == ["Ana", "Ben Cy"],

@@ -12,3 +12,9 @@ included:
 line_length: 120
 cyclomatic_complexity:
   ignores_case_statements: true
+custom_rules:
+  tests_stay_out_of_user_defaults:
+    included: "Tests/.*\\.swift"
+    regex: "UserDefaults\\s*[.(]"
+    message: "Tests use StoreInMemory; real UserDefaults domains outlive the test and pile up in ~/Library/Preferences"
+    severity: error

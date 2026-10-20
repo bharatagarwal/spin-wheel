@@ -40,7 +40,7 @@ func tla(_ standup: Standup<StopsWhereTold>) -> String {
 
 @Test func theRealStandupLeavesTracesForTLC() throws {
     var rng = SplitMix64(state: 2026)
-    let team = Team.load(from: scratchDefaults(), orFrom: [])
+    let team = defaultTeam()
     var traces: [[String]] = []
     for _ in 0..<300 {
         var standup = Standup<StopsWhereTold>(team: team)

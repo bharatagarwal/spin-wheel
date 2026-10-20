@@ -13,25 +13,33 @@ struct Name: Hashable, CustomStringConvertible {
     var description: String { text }
 }
 
+protocol NamesStore {
+    func string(forKey key: String) -> String?
+    func set(_ value: Any?, forKey key: String)
+}
+
+extension UserDefaults: NamesStore {}
+
 struct Team {
     private(set) var names: [Name] = []
 
     static let previousApps = ["local.yourturn", "local.spinwheel"].compactMap(UserDefaults.init(suiteName:))
 
-    static func load(from defaults: UserDefaults = .standard, orFrom previous: [UserDefaults] = previousApps) -> Team {
-        let saved = defaults.string(forKey: "names")
+    static func load(from store: any NamesStore = UserDefaults.standard,
+                     orFrom previous: [any NamesStore] = previousApps) -> Team {
+        let saved = store.string(forKey: "names")
             ?? previous.lazy.compactMap { $0.string(forKey: "names") }.first
             ?? "Alice\nBob\nCharlie\nDana"
         var team = Team()
         for line in saved.split(whereSeparator: \.isNewline) {
             _ = team.add(line)
         }
-        team.save(to: defaults)
+        team.save(to: store)
         return team
     }
 
-    func save(to defaults: UserDefaults = .standard) {
-        defaults.set(names.map(\.text).joined(separator: "\n"), forKey: "names")
+    func save(to store: any NamesStore = UserDefaults.standard) {
+        store.set(names.map(\.text).joined(separator: "\n"), forKey: "names")
     }
 
     mutating func add(_ typed: some StringProtocol) -> Name? {

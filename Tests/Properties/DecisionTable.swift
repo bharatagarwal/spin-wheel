@@ -127,7 +127,7 @@ func apply(_ act: Act, by name: Name, to standup: inout Standup<StopsWhereTold>,
     var rng = SplitMix64(state: 7)
     var taken = Set<Int>()
     for _ in 0..<200 {
-        var standup = Standup<StopsWhereTold>(team: Team.load(from: scratchDefaults(), orFrom: []))
+        var standup = Standup<StopsWhereTold>(team: defaultTeam())
         for _ in 0..<30 {
             let phase: Phase = standup.spin == nil ? .idle : .spinning
             let waiting: Waiting = standup.turns.waiting.isEmpty ? .nobody : .somebody

@@ -16,6 +16,8 @@ fi
 [[ -d /Applications/Xcode.app ]] || export TOOLCHAIN_DIR=/Library/Developer/CommandLineTools
 
 failed=()
+leftovers() { ls ~/Library/Preferences | grep -i hotpotato | grep -v -x -e local.hotpotato.plist -e local.hotpotato.verify.plist }
+leftovers_before=$(leftovers)
 parses() {
     local script
     for script in "$@"; do zsh -n $script || return 1; done
@@ -38,6 +40,8 @@ step model Verification/check.sh
 step traces Verification/check.sh traces
 step geometry Verification/prove-geometry.sh
 step mutants python3 -I Verification/mutants.py
+leaves_nothing() { [[ $(leftovers) == $leftovers_before ]] || { print "left behind in ~/Library/Preferences:"; leftovers; return 1 } }
+step footprint leaves_nothing
 
 print
 if (( $#failed )); then print "FAILED: $failed"; exit 1; fi

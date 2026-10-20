@@ -39,7 +39,7 @@ final class StopsWhereTold: Spinning {
 }
 
 struct RecordedStandup {
-    var standup = Standup<StopsWhereTold>(team: Team.load(from: scratchDefaults(), orFrom: []))
+    var standup = Standup<StopsWhereTold>(team: defaultTeam())
     var winnersThisRound: [Name] = []
 
     mutating func apply(_ action: Action) {

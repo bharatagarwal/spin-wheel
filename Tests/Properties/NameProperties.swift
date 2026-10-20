@@ -45,11 +45,11 @@ func looks(_ typed: String) -> String {
 
 @Test func aSavedTeamLoadsBackUnchanged() async {
     await propertyCheck(count: 1000, input: typedName.array(of: 0...6)) { typed in
-        var team = Team.load(from: scratchDefaults(), orFrom: [])
+        var team = defaultTeam()
         for name in typed { _ = team.add(name) }
-        let defaults = scratchDefaults()
-        team.save(to: defaults)
-        #expect(Team.load(from: defaults, orFrom: []).names == team.names)
+        let store = StoreInMemory()
+        team.save(to: store)
+        #expect(Team.load(from: store, orFrom: []).names == team.names)
     }
 }
 
@@ -69,12 +69,12 @@ struct TeamSavedBeforeNamesWereCleaned {
     await propertyCheck(count: 1000, input: typedName.array(of: 0...6)) { typed in
         var old = TeamSavedBeforeNamesWereCleaned()
         for name in typed { old.add(name) }
-        let defaults = scratchDefaults()
-        defaults.set(old.saved, forKey: "names")
+        let store = StoreInMemory()
+        store.set(old.saved, forKey: "names")
         var expected: [Name] = []
         for line in old.names.flatMap({ $0.split(whereSeparator: \.isNewline) }) {
             if let name = Name(line), !expected.contains(name) { expected.append(name) }
         }
-        #expect(Team.load(from: defaults, orFrom: []).names == expected, "old save \(old.saved.debugDescription)")
+        #expect(Team.load(from: store, orFrom: []).names == expected, "old save \(old.saved.debugDescription)")
     }
 }
