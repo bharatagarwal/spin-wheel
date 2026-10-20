@@ -68,7 +68,7 @@ Physics changes that only move *where* the wheel stops (forces, friction, geomet
 
 ## Run it
 
-From the repo root. `./check.sh` runs these along with every other check in the repo (build, lint, complexity, unit tests, physics statistics); `./check.sh quick` skips the statistics.
+From the repo root. `./check.sh` runs these along with every other check in the repo (build, lint, complexity, unit tests, property-based tests, physics statistics); `./check.sh quick` skips the statistics.
 
 ```sh
 Verification/check.sh                 # all properties, about 5 s

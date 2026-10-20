@@ -9,7 +9,7 @@ The user starts a spin; a physically simulated wheel turns, pegs knock the sprin
 - `spin-flick`: dragging the wheel turns it under the pointer; releasing lets it go at the flick speed, clamped to 9–12 rad/s, in either direction.
 - `spin-space`: the Space key starts a spin, as long as the Add name field is not focused.
 - `spin-motion`: the wheel turns, the flapper deflects at pegs, the background dims and the wheel zooms in as it slows.
-- `spin-result`: the banner shows the winner, which is the slice under the flapper tip.
+- `spin-result`: the banner shows the winner, which is the slice under the flapper tip. When the tip rests on a peg, it is the slice the flapper leans in from.
 - `spin-locked`: Spin and Reset are disabled while the wheel turns.
 
 ## How to get to it (user POV)

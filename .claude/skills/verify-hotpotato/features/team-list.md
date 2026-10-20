@@ -5,7 +5,8 @@ The panel on the right lists the team. The user adds a name in the field at the 
 ## Sub-features
 
 - `add`: typing a name and pressing Return or + adds it to the list and the wheel.
-- `add-reject`: blank names and duplicates are ignored.
+- `add-reject`: blank names and duplicates are ignored. A name is kept on one line: whitespace runs and line breaks become one space and invisible characters are dropped, so names that look the same count as one.
+- `add-after-spin`: adding or removing someone while the banner shows turns the wheel so the winner's slice stays under the flapper.
 - `remove`: × removes a name from the list and the wheel. It is disabled while the wheel turns.
 - `add-mid-spin`: a name added while the wheel turns joins the wheel at the next spin, so the stopped wheel still matches the banner.
 - `persist`: the list survives quitting and relaunching.
@@ -25,10 +26,11 @@ Preconditions: fresh `sw launch` (Alice, Bob, Charlie, Dana, Eve).
 - **Remove.** `$SW press remove-Bob`. `$SW get member-Bob` fails (no element); `$SW names` has no Bob; `$SW shot removed` shows five slices without Bob.
 - **Persist.** Run the app's own relaunch: `kill $(cat .verify/state/pid)`, start it again with `open -n .verify/HotPotatoVerify.app`, write `pgrep -n -f HotPotatoVerify.app/Contents/MacOS/HotPotato` into `.verify/state/pid`, and `$SW wait spin ""` to wait for the window. `$SW names` and the tree must show the list from before (with Frank, without Bob). Do not use `sw launch` for this step: it reseeds the list.
 - **Add mid-spin.** `$SW press spin`, then within a second `$SW add Gina` and `$SW press remove-Alice` (fails with `#remove-Alice is disabled`). After `$SW wait wheel idle 30`, `$SW shot mid-spin-add` shows the logged winner's slice under the flapper and no Gina slice; the next `$SW spin` logs one more slice.
+- **Add after a spin.** `$SW spin`, note `winner=W`, then `$SW add Hal` and `$SW shot added-after-spin`: the wheel has one more slice and W's slice is still under the flapper, matching `$SW get winner`. `$SW press remove-` a name other than W and shoot again: same check.
 - **Proof.** `added.png`, `removed.png`, `mid-spin-add.png`, and the `sw names` output before and after relaunch.
 
 ## Gotchas
 
 - `sw add` sets the field's value over AX and then presses +. Return-to-submit needs a real keystroke into a frontmost window; only prove it when the change touches the field's submit handling.
 - Removing a name mid-spin does not take it off the turning wheel; it takes effect after the spin.
-- Names are trimmed of spaces before the duplicate check.
+- `Team.add` cleans names before the duplicate check; the property tests in `Tests/Properties/NameProperties.swift` cover the awkward characters (line breaks, `\r\n`, zero-width and non-breaking spaces) that `sw add` cannot easily type.
