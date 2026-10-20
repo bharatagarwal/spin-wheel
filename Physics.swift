@@ -64,6 +64,8 @@ struct WheelSim {
         var hingeDampingRatio = 0.45
         var bendStiffness = 12.0
         var bendDampingRatio = 0.15
+        var swingLimit = 0.9
+        var bendLimit = 0.5
         var contactStiffness = 3e5
         var contactDamping = 0.6
         var contactFriction = 0.15
@@ -161,6 +163,7 @@ struct WheelSim {
         let contacts = pegContacts()
         stepFlapper(forceRoot: -p.hingeStiffness * rootFromVertical - rootDamping * rootRate + bend + contacts.forceRoot,
                     forceTip: -bend + contacts.forceTip, segmentMass: segmentMass)
+        holdFlapperWithinStops()
         stepWheel(contactTorque: contacts.torque)
         settle()
         return contacts.impact
@@ -259,6 +262,21 @@ struct WheelSim {
         tipRate += (m11 * r2 - m12 * r1) / det * h
         rootFromVertical += rootRate * h
         tipFromVertical += tipRate * h
+    }
+
+    private mutating func holdFlapperWithinStops() {
+        let p = params
+        if abs(rootFromVertical) > p.swingLimit {
+            let outward = rootFromVertical < 0 ? -1.0 : 1.0
+            rootFromVertical = outward * p.swingLimit
+            if rootRate * outward > 0 { rootRate = 0 }
+        }
+        let bend = tipFromVertical - rootFromVertical
+        if abs(bend) > p.bendLimit {
+            let outward = bend < 0 ? -1.0 : 1.0
+            tipFromVertical = rootFromVertical + outward * p.bendLimit
+            if (tipRate - rootRate) * outward > 0 { tipRate = rootRate }
+        }
     }
 
     private mutating func stepWheel(contactTorque: Double) {

@@ -119,3 +119,28 @@ let mostAPegMayBeSquashed = WheelRadii.pegRadius
         #expect(abs(original.tipFromVertical + mirrored.tipFromVertical) < 1e-6)
     }
 }
+
+struct Drag: Sendable, CustomStringConvertible {
+    let fingerSpeed: Double
+    let frames: Int
+    var description: String { "\(frames) frames at \(fingerSpeed) rad/s" }
+}
+
+@Test func aWheelDraggedAnyWaySettlesCleanly() async {
+    let drags = zip(Gen.double(in: -80...80), Gen.int(in: 1...40)).map { Drag(fingerSpeed: $0, frames: $1) }.array(of: 1...6)
+    await propertyCheck(count: 150, input: teamSize, startAngle, drags, Gen.uint64()) { slices, start, drags, seed in
+        var sim = WheelSim(slices: slices, clockwiseAngle: start)
+        var watch = Watch()
+        for drag in drags {
+            for _ in 0..<drag.frames {
+                sim.drive(drag.fingerSpeed)
+                sim.advance(1.0 / 120, onStep: { watch.observe($0, coasting: false) })
+            }
+        }
+        sim.push(push(flicked: drags.last?.fingerSpeed ?? 0, seed: seed))
+        coastToRest(&sim, watch: &watch)
+        #expect(sim.stopped && sim.time < 30 + Double(drags.map(\.frames).reduce(0, +)) / 120, "after \(sim.time) s")
+        #expect(watch.deepestOverlap < mostAPegMayBeSquashed, "overlap \(watch.deepestOverlap)")
+        #expect(watch.widestSwing < .pi / 2, "swing \(watch.widestSwing)")
+    }
+}
