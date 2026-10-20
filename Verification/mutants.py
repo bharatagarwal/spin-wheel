@@ -51,8 +51,31 @@ CODE_MUTANTS = [
      "turns = TurnOrder(shuffling: team.names)"),
 ]
 
+GEOMETRY_MUTANTS = [
+    Mutant("every point of the flapper", "the flapper's segments grow to a whole armLength each",
+           "static let segmentLength = armLength / 2", "static let segmentLength = armLength"),
+    Mutant("never skips a peg", "pegsReachableFromPointer looks only a third as far either side of the pointer",
+           "asin(min(1, flapperReach / pegCircle))", "asin(min(1, flapperReach / pegCircle)) / 3"),
+    Mutant("never jams", "the flapper's swing stop moves in to 0.3 rad",
+           "var swingLimit = 0.9", "var swingLimit = 0.3"),
+]
+
 missed = 0
 repo = here.parent
+physics = (repo / "Physics.swift").read_text()
+for m in GEOMETRY_MUTANTS:
+    if physics.count(m.spec_text) != 1:
+        print("STALE   geometry: mutant text no longer matches Physics.swift; update mutants.py")
+        missed += 1
+        continue
+    with tempfile.TemporaryDirectory() as tmp:
+        mutated = pathlib.Path(tmp, "Physics.swift")
+        mutated.write_text(physics.replace(m.spec_text, m.broken_text))
+        r = subprocess.run(["zsh", str(here / "prove-geometry.sh"), str(mutated)], capture_output=True, text=True)
+        failed_claims = [line for line in r.stdout.splitlines() if line.startswith("FAILED")]
+        caught = r.returncode == 1 and any(m.prop in line for line in failed_claims)
+        print(f"{'caught' if caught else 'MISSED'}  geometry: {m.code_change}")
+        missed += not caught
 code = (repo / "Turns.swift").read_text()
 for m in CODE_MUTANTS:
     if code.count(m.spec_text) != 1:
