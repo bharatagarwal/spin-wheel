@@ -8,6 +8,21 @@ enum Step: CaseIterable {
 
 let typedNames = ["Alice", "Bob ", " Eve", "Fay\t", "", "Dana"]
 
+extension Standup<StopsWhereTold> {
+    mutating func take(_ step: Step, using rng: inout some RandomNumberGenerator) {
+        switch step {
+        case .add: _ = add(typedNames.randomElement(using: &rng)!)
+        case .remove: Name(typedNames.randomElement(using: &rng)!).map { remove($0) }
+        case .spin: _ = begin { slices, _ in StopsWhereTold(slices: slices) }
+        case .grab: begin { slices, _ in StopsWhereTold(slices: slices) }?.held = true
+        case .release: spin?.held = false
+        case .stop:
+            if let spin, !spin.held { _ = finish(atSlice: Int.random(in: spin.slices.indices, using: &rng)) }
+        case .reset: reset()
+        }
+    }
+}
+
 func tla(_ names: [Name]) -> String {
     "<<" + names.map { "\"\($0.text)\"" }.joined(separator: ", ") + ">>"
 }
@@ -30,16 +45,7 @@ func tla(_ standup: Standup<StopsWhereTold>) -> String {
         var standup = Standup<StopsWhereTold>(team: team)
         var trace = [tla(standup)]
         for _ in 0..<40 {
-            switch Step.allCases.randomElement(using: &rng)! {
-            case .add: _ = standup.add(typedNames.randomElement(using: &rng)!)
-            case .remove: Name(typedNames.randomElement(using: &rng)!).map { standup.remove($0) }
-            case .spin: _ = standup.begin { slices, _ in StopsWhereTold(slices: slices) }
-            case .grab: standup.begin { slices, _ in StopsWhereTold(slices: slices) }?.held = true
-            case .release: standup.spin?.held = false
-            case .stop:
-                if let spin = standup.spin, !spin.held { _ = standup.finish(atSlice: Int.random(in: spin.slices.indices, using: &rng)) }
-            case .reset: standup.reset()
-            }
+            standup.take(Step.allCases.randomElement(using: &rng)!, using: &rng)
             let state = tla(standup)
             if state != trace.last { trace.append(state) }
         }
