@@ -27,9 +27,28 @@ enum WheelRadii {
 
     static func sliceAngle(_ i: Int, of slices: Int) -> Double { Double(i) * 2 * .pi / Double(slices) }
 
+    static func slicesFromFirst(to point: YDownPoint, wheelAngle: Double, slices: Int) -> Double {
+        var a = (atan2(point.y, point.x) - wheelAngle).truncatingRemainder(dividingBy: 2 * .pi)
+        if a < 0 { a += 2 * .pi }
+        return a / (2 * .pi / Double(slices))
+    }
+
     static func peg(_ i: Int, of slices: Int, wheelAngle: Double = 0) -> YDownPoint {
         let angle = wheelAngle + sliceAngle(i, of: slices)
         return (x: pegCircle * cos(angle), y: pegCircle * sin(angle))
+    }
+}
+
+struct WheelPose {
+    var clockwiseAngle = 0.0
+    var rootFromVertical = 0.0
+    var tipFromVertical = 0.0
+
+    func clockwiseAngle(keepingSlice old: Int, of oldSlices: Int, underTheFlapperAs new: Int, of newSlices: Int) -> Double {
+        let tip = WheelRadii.flapper(rootFromVertical: rootFromVertical, tipFromVertical: tipFromVertical).tip
+        let intoSlice = WheelRadii.slicesFromFirst(to: tip, wheelAngle: clockwiseAngle, slices: oldSlices) - Double(old)
+        let target = atan2(tip.y, tip.x) - (Double(new) + intoSlice) * 2 * .pi / Double(newSlices)
+        return clockwiseAngle + remainder(target - clockwiseAngle, 2 * .pi)
     }
 }
 
@@ -125,10 +144,7 @@ struct WheelSim {
     }
 
     var winner: Int {
-        let t = points.tip
-        var a = (atan2(t.y, t.x) - clockwiseAngle).truncatingRemainder(dividingBy: 2 * .pi)
-        if a < 0 { a += 2 * .pi }
-        return min(Int(a / segment), slices - 1)
+        min(Int(WheelRadii.slicesFromFirst(to: points.tip, wheelAngle: clockwiseAngle, slices: slices)), slices - 1)
     }
 
     private var points: FlapperPoints {

@@ -26,12 +26,6 @@ final class Ticker: NSObject {
     }
 }
 
-struct WheelPose {
-    var clockwiseAngle = 0.0
-    var rootFromVertical = 0.0
-    var tipFromVertical = 0.0
-}
-
 final class SpinSession {
     private struct Grip {
         var target: Double
@@ -215,7 +209,7 @@ final class Model: ObservableObject {
     func add() {
         guard let name = team.add(newName) else { return }
         switch phase {
-        case .idle: turns.add(name)
+        case .idle: keepingTheWinnerUnderTheFlapper { turns.add(name) }
         case .spinning: turns.addForNextSpin(name)
         }
         newName = ""
@@ -224,7 +218,15 @@ final class Model: ObservableObject {
     func remove(_ name: String) {
         guard case .idle(let winner) = phase else { return }
         team.remove(name)
-        turns.remove(name)
+        keepingTheWinnerUnderTheFlapper { turns.remove(name) }
         if winner == name { phase = .idle(winner: nil) }
+    }
+
+    private func keepingTheWinnerUnderTheFlapper(_ change: () -> Void) {
+        let before = turns.wheel
+        change()
+        guard case .idle(let winner?) = phase,
+              let old = before.firstIndex(of: winner), let new = turns.wheel.firstIndex(of: winner) else { return }
+        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count, underTheFlapperAs: new, of: turns.wheel.count)
     }
 }

@@ -32,7 +32,7 @@ let action = Gen<Action>.frequency(
 struct Standup {
     var team = Team.load(from: scratchDefaults(), orFrom: [])
     var turns = TurnOrder()
-    var clockwiseAngle = 0.0
+    var pose = WheelPose()
     var announced: String?
     var winnersThisRound: [String] = []
 
@@ -42,7 +42,14 @@ struct Standup {
 
     mutating func add(_ typed: String, spinning: Bool) {
         guard let name = team.add(typed) else { return }
-        if spinning { turns.addForNextSpin(name) } else { turns.add(name) }
+        if spinning { turns.addForNextSpin(name) } else { keepingTheWinnerUnderTheFlapper { $0.add(name) } }
+    }
+
+    mutating func keepingTheWinnerUnderTheFlapper(_ change: (inout TurnOrder) -> Void) {
+        let before = turns.wheel
+        change(&turns)
+        guard let announced, let old = before.firstIndex(of: announced), let new = turns.wheel.firstIndex(of: announced) else { return }
+        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count, underTheFlapperAs: new, of: turns.wheel.count)
     }
 
     mutating func apply(_ action: Action) {
@@ -50,14 +57,14 @@ struct Standup {
         case .add(let name): add(name, spinning: false)
         case .remove(let name):
             team.remove(name)
-            turns.remove(name)
+            keepingTheWinnerUnderTheFlapper { $0.remove(name) }
             winnersThisRound.removeAll { $0 == name }
             if announced == name { announced = nil }
         case .spin(let stoppingAt, let late):
             guard !turns.waiting.isEmpty else { return }
             let slices = turns.beginSpin()
             if let late { add(late, spinning: true) }
-            clockwiseAngle = stoppingAt
+            pose.clockwiseAngle = stoppingAt
             let winner = sliceUnderResting(flapperOver: slices, at: stoppingAt)
             winnersThisRound.append(winner)
             turns.markDone(winner)
@@ -85,6 +92,18 @@ struct Standup {
     }
 }
 
+@Test func theFlapperKeepsPointingAtTheAnnouncedWinner() async {
+    await propertyCheck(count: 500, input: action.array(of: 0...20)) { actions in
+        var standup = Standup()
+        for action in actions {
+            standup.apply(action)
+            guard let announced = standup.announced else { continue }
+            let pointedAt = sliceUnderResting(flapperOver: standup.turns.wheel, at: standup.pose.clockwiseAngle)
+            #expect(pointedAt == announced, "banner says \(announced), flapper points at \(pointedAt), after \(action)")
+        }
+    }
+}
+
 @Test func everyoneGetsATurnBeforeAnyoneGoesAgain() async {
     await propertyCheck(input: memberName.array(of: 1...8), Gen.double(in: 0..<(2 * .pi)).array(of: 20...20)) { added, stops in
         var standup = Standup()
@@ -94,5 +113,20 @@ struct Standup {
             standup.apply(.spin(stoppingAt: stop, addedMidSpin: nil))
         }
         #expect(Set(standup.winnersThisRound) == team)
+    }
+}
+
+@Test func reslicingKeepsTheFlapperAtTheSameSpotInTheWinnersSlice() async {
+    let bend = Gen.double(in: -0.6...0.6)
+    await propertyCheck(count: 2000, input: zip(Gen.int(in: 1...40), Gen.int(in: 1...40)), Gen.double(in: -100...100), bend, bend) { sizes, angle, root, tip in
+        let (oldSlices, newSlices) = sizes
+        let pose = WheelPose(clockwiseAngle: angle, rootFromVertical: root, tipFromVertical: tip)
+        let flapperTip = WheelRadii.flapper(rootFromVertical: root, tipFromVertical: tip).tip
+        let before = WheelRadii.slicesFromFirst(to: flapperTip, wheelAngle: angle, slices: oldSlices)
+        let old = Int(before), new = old % newSlices
+        let turned = pose.clockwiseAngle(keepingSlice: old, of: oldSlices, underTheFlapperAs: new, of: newSlices)
+        let after = WheelRadii.slicesFromFirst(to: flapperTip, wheelAngle: turned, slices: newSlices)
+        #expect(Int(after) == new && abs((after - Double(new)) - (before - Double(old))) < 1e-9, "\(before) → \(after)")
+        #expect(abs(turned - angle) <= .pi + 1e-9, "turns the short way")
     }
 }
