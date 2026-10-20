@@ -20,11 +20,15 @@ Range(s) == {s[i] : i \in 1..Len(s)}
 Without(s, n) == SelectSeq(s, LAMBDA x : x # n)
 Waiting == SelectSeq(order, LAMBDA x : x \notin done)
 
+RECURSIVE Shuffles(_)
+Shuffles(s) == IF s = <<>> THEN {<<>>}
+               ELSE UNION {{<<s[i]>> \o rest : rest \in Shuffles(Without(s, s[i]))} : i \in 1..Len(s)}
+
 Init ==
     /\ team = InitialTeam
-    /\ order = InitialTeam
+    /\ order \in Shuffles(InitialTeam)
     /\ done = {}
-    /\ wheel = InitialTeam
+    /\ wheel = order
     /\ phase = "idle"
     /\ winner = None
     /\ slices = <<>>
@@ -82,8 +86,8 @@ Remove(n) ==
 
 Reset ==
     /\ phase = "idle"
-    /\ order' = team
-    /\ wheel' = team
+    /\ order' \in Shuffles(team)
+    /\ wheel' = order'
     /\ done' = {}
     /\ winner' = None
     /\ UNCHANGED <<team, phase, slices, motion, pickRecordForProperties>>

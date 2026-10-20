@@ -13,13 +13,13 @@ class Mutant(NamedTuple):
 
 
 MUTANTS = [
-    Mutant("PickedFromTeam", "Model.remove(_:) loses `guard case .idle`, so × works mid-spin",
+    Mutant("PickedFromTeam", "Standup.remove(_:) loses `guard case .idle`, so × works mid-spin",
      'Remove(n) ==\n    /\\ phase = "idle"\n', 'Remove(n) ==\n'),
     Mutant("PickedOnce", "TurnOrder.beginSpin() returns `order` instead of `waiting`",
      "    /\\ wheel' = Waiting\n    /\\ slices' = Waiting\n", "    /\\ wheel' = order\n    /\\ slices' = order\n"),
-    Mutant("BannerOnWheel", "Model.remove(_:) stops clearing the banner when the winner is removed",
+    Mutant("BannerOnWheel", "Standup.remove(_:) stops clearing the banner when the winner is removed",
      "    /\\ winner' = IF winner = n THEN None ELSE winner\n", "    /\\ UNCHANGED winner\n"),
-    Mutant("WheelFrozenWhileSpinning", "Model.add() calls turns.add(_:) in both phases",
+    Mutant("WheelFrozenWhileSpinning", "Standup.add(_:) calls turns.add(_:) in both phases",
      'IF phase = "idle" THEN Append(wheel, n) ELSE wheel', "Append(wheel, n)"),
     Mutant("NoDuplicateSlices", "Team.add(_:) drops its `!names.contains(name)` check",
      "    /\\ n \\notin Range(team)\n", ""),
@@ -32,7 +32,44 @@ MUTANTS = [
      "FairSpec == Spec /\\ UserLetsGo /\\ WheelComesToRest\n", "FairSpec == Spec /\\ WheelComesToRest\n"),
 ]
 
+CODE_MUTANTS = [
+    Mutant("traces", "Standup.add(_:) puts a name added mid-spin on the spinning wheel",
+     "case .spinning: turns.addForNextSpin(name)", "case .spinning: turns.add(name)"),
+    Mutant("traces", "Standup.remove(_:) loses `guard case .idle`, so × works mid-spin",
+     "guard case .idle(let winner) = phase else { return }\n        team.remove(name)", "let winner = winner\n        team.remove(name)"),
+    Mutant("traces", "Standup.remove(_:) stops clearing the banner when the winner is removed",
+     "        if winner == name { phase = .idle(winner: nil) }\n", ""),
+    Mutant("traces", "Standup.reset() loses `guard case .idle`, so Reset works mid-spin",
+     "guard case .idle = phase else { return }\n        turns = TurnOrder(shuffling: team.names)", "turns = TurnOrder(shuffling: team.names)"),
+]
+
 missed = 0
+repo = here.parent
+code = (repo / "Turns.swift").read_text()
+for m in CODE_MUTANTS:
+    if code.count(m.spec_text) != 1:
+        print(f"STALE   {m.prop}: mutant text no longer matches Turns.swift; update mutants.py")
+        missed += 1
+        continue
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        for f in ["Physics.swift", "property-test.sh"]:
+            shutil.copy(repo / f, tmp)
+        (tmp / "Turns.swift").write_text(code.replace(m.spec_text, m.broken_text))
+        (tmp / "Tests").symlink_to(repo / "Tests")
+        (tmp / ".verify").symlink_to(repo / ".verify")
+        (tmp / "Verification").mkdir()
+        for f in ["check.sh", "TurnOrder.tla", "TraceCheck.tla"]:
+            shutil.copy(here / f, tmp / "Verification")
+        r = subprocess.run(["zsh", str(tmp / "Verification/check.sh"), "traces"], capture_output=True, text=True)
+        log = repo / ".verify/tla/traces.log"
+        swift_log = (repo / ".verify/tla/traces-swift.log").read_text()
+        by = ("TLC" if log.exists() and "Deadlock reached" in log.read_text()
+              else "a contract" if "Assertion failed" in swift_log else None)
+        caught = r.returncode == 1 and by is not None
+        print(f"{'caught' if caught else 'MISSED'}  {m.prop}: {m.code_change}{f' (by {by})' if caught else ''}")
+        missed += not caught
+
 for m in MUTANTS:
     if spec.count(m.spec_text) != 1:
         print(f"STALE   {m.prop}: mutant text no longer matches TurnOrder.tla; update mutants.py")

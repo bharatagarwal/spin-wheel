@@ -30,6 +30,7 @@ step unit ./unit-test.sh
 step properties ./property-test.sh
 [[ $1 == quick ]] || step fairness ./test.sh 1000
 step model Verification/check.sh
+step traces Verification/check.sh traces
 step mutants python3 -I Verification/mutants.py
 
 print

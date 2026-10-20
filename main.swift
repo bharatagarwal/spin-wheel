@@ -31,7 +31,6 @@ struct ContentView: View {
             .padding(24)
         }
         .onAppear {
-            m.reset()
             // macOS focuses the text field at launch, which would swallow Space.
             DispatchQueue.main.async { typingName = false }
         }

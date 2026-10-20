@@ -29,77 +29,61 @@ let action = Gen<Action>.frequency(
     (1, Gen.always(Action.newRound).eraseToAnySequence())
 )
 
-struct Standup {
-    var team = Team.load(from: scratchDefaults(), orFrom: [])
-    var turns = TurnOrder()
-    var pose = WheelPose()
-    var announced: Name?
+final class StopsWhereTold: Spinning {
+    let slices: [Name]
+    var held = false
+
+    init(slices: [Name]) {
+        self.slices = slices
+    }
+}
+
+struct RecordedStandup {
+    var standup = Standup<StopsWhereTold>(team: Team.load(from: scratchDefaults(), orFrom: []))
     var winnersThisRound: [Name] = []
-
-    init() {
-        turns = TurnOrder(shuffling: team.names)
-    }
-
-    mutating func add(_ typed: String, spinning: Bool) {
-        guard let name = team.add(typed) else { return }
-        if spinning { turns.addForNextSpin(name) } else { keepingTheWinnerUnderTheFlapper { $0.add(name) } }
-    }
-
-    mutating func keepingTheWinnerUnderTheFlapper(_ change: (inout TurnOrder) -> Void) {
-        let before = turns.wheel
-        change(&turns)
-        guard let announced, let old = before.firstIndex(of: announced), let new = turns.wheel.firstIndex(of: announced) else { return }
-        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count, underTheFlapperAs: new, of: turns.wheel.count)
-    }
 
     mutating func apply(_ action: Action) {
         switch action {
-        case .add(let name): add(name, spinning: false)
+        case .add(let name): _ = standup.add(name)
         case .remove(let typed):
             guard let name = Name(typed) else { return }
-            team.remove(name)
-            keepingTheWinnerUnderTheFlapper { $0.remove(name) }
+            standup.remove(name)
             winnersThisRound.removeAll { $0 == name }
-            if announced == name { announced = nil }
         case .spin(let stoppingAt, let late):
-            guard !turns.waiting.isEmpty else { return }
-            let slices = turns.beginSpin()
-            if let late { add(late, spinning: true) }
-            pose.clockwiseAngle = stoppingAt
-            let winner = sliceUnderResting(flapperOver: slices, at: stoppingAt)
-            winnersThisRound.append(winner)
-            turns.markDone(winner)
-            announced = winner
+            guard let spin = standup.begin({ slices, _ in StopsWhereTold(slices: slices) }) else { return }
+            if let late { _ = standup.add(late) }
+            standup.pose.clockwiseAngle = stoppingAt
+            let winner = WheelSim(slices: spin.slices.count, clockwiseAngle: stoppingAt).winner
+            winnersThisRound.append(standup.finish(atSlice: winner)!)
         case .newRound:
-            turns = TurnOrder(shuffling: team.names)
+            standup.reset()
             winnersThisRound = []
-            announced = nil
         }
     }
 }
 
 @Test func turnOrderInvariantsHoldForAnyStandup() async {
     await propertyCheck(count: 500, input: action.array(of: 0...40)) { actions in
-        var standup = Standup()
+        var recorded = RecordedStandup()
         for action in actions {
-            standup.apply(action)
-            let turns = standup.turns
-            #expect(Set(turns.order) == Set(standup.team.names), "the turn order is the team, after \(action)")
+            recorded.apply(action)
+            let turns = recorded.standup.turns
+            #expect(Set(turns.order) == Set(recorded.standup.team.names), "the turn order is the team, after \(action)")
             #expect(turns.order.count == Set(turns.order).count, "nobody is in the order twice, after \(action)")
             #expect(Set(turns.wheel).isSubset(of: turns.order), "every slice is a team member, after \(action)")
             #expect(turns.done.isSubset(of: Set(turns.order)), "only members are done, after \(action)")
-            #expect(standup.winnersThisRound.count == Set(standup.winnersThisRound).count, "nobody wins twice in a round, after \(action)")
+            #expect(recorded.winnersThisRound.count == Set(recorded.winnersThisRound).count, "nobody wins twice in a round, after \(action)")
         }
     }
 }
 
 @Test func theFlapperKeepsPointingAtTheAnnouncedWinner() async {
     await propertyCheck(count: 500, input: action.array(of: 0...20)) { actions in
-        var standup = Standup()
+        var recorded = RecordedStandup()
         for action in actions {
-            standup.apply(action)
-            guard let announced = standup.announced else { continue }
-            let pointedAt = sliceUnderResting(flapperOver: standup.turns.wheel, at: standup.pose.clockwiseAngle)
+            recorded.apply(action)
+            guard let announced = recorded.standup.winner else { continue }
+            let pointedAt = sliceUnderResting(flapperOver: recorded.standup.turns.wheel, at: recorded.standup.pose.clockwiseAngle)
             #expect(pointedAt == announced, "banner says \(announced), flapper points at \(pointedAt), after \(action)")
         }
     }
@@ -107,13 +91,13 @@ struct Standup {
 
 @Test func everyoneGetsATurnBeforeAnyoneGoesAgain() async {
     await propertyCheck(input: memberName.array(of: 1...8), Gen.double(in: 0..<(2 * .pi)).array(of: 20...20)) { added, stops in
-        var standup = Standup()
-        for name in added { standup.add(name, spinning: false) }
-        let team = Set(standup.team.names)
-        for stop in stops where !standup.turns.waiting.isEmpty {
-            standup.apply(.spin(stoppingAt: stop, addedMidSpin: nil))
+        var recorded = RecordedStandup()
+        for name in added { _ = recorded.standup.add(name) }
+        let team = Set(recorded.standup.team.names)
+        for stop in stops where !recorded.standup.turns.waiting.isEmpty {
+            recorded.apply(.spin(stoppingAt: stop, addedMidSpin: nil))
         }
-        #expect(Set(standup.winnersThisRound) == team)
+        #expect(Set(recorded.winnersThisRound) == team)
     }
 }
 

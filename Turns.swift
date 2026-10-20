@@ -96,3 +96,76 @@ struct TurnOrder {
         done.insert(name)
     }
 }
+
+protocol Spinning {
+    var slices: [Name] { get }
+}
+
+struct Standup<Spin: Spinning> {
+    enum Phase {
+        case idle(winner: Name?)
+        case spinning(Spin)
+    }
+
+    private(set) var team: Team
+    private(set) var turns: TurnOrder
+    private(set) var phase = Phase.idle(winner: nil)
+    var pose = WheelPose()
+
+    init(team: Team) {
+        self.team = team
+        turns = TurnOrder(shuffling: team.names)
+    }
+
+    var spin: Spin? {
+        if case .spinning(let spin) = phase { spin } else { nil }
+    }
+
+    var winner: Name? {
+        if case .idle(let winner) = phase { winner } else { nil }
+    }
+
+    mutating func begin(_ start: (_ slices: [Name], _ clockwiseAngle: Double) -> Spin) -> Spin? {
+        guard case .idle = phase, !turns.waiting.isEmpty else { return nil }
+        let spin = start(turns.beginSpin(), pose.clockwiseAngle)
+        phase = .spinning(spin)
+        return spin
+    }
+
+    mutating func finish(atSlice slice: Int) -> Name? {
+        guard let spin else { return nil }
+        let name = spin.slices[slice]
+        turns.markDone(name)
+        phase = .idle(winner: name)
+        return name
+    }
+
+    mutating func reset() {
+        guard case .idle = phase else { return }
+        turns = TurnOrder(shuffling: team.names)
+        phase = .idle(winner: nil)
+    }
+
+    mutating func add(_ typed: some StringProtocol) -> Name? {
+        guard let name = team.add(typed) else { return nil }
+        switch phase {
+        case .idle: keepingTheWinnerUnderTheFlapper { $0.add(name) }
+        case .spinning: turns.addForNextSpin(name)
+        }
+        return name
+    }
+
+    mutating func remove(_ name: Name) {
+        guard case .idle(let winner) = phase else { return }
+        team.remove(name)
+        keepingTheWinnerUnderTheFlapper { $0.remove(name) }
+        if winner == name { phase = .idle(winner: nil) }
+    }
+
+    private mutating func keepingTheWinnerUnderTheFlapper(_ change: (inout TurnOrder) -> Void) {
+        let before = turns.wheel
+        change(&turns)
+        guard let winner, let old = before.firstIndex(of: winner), let new = turns.wheel.firstIndex(of: winner) else { return }
+        pose.clockwiseAngle = pose.clockwiseAngle(keepingSlice: old, of: before.count, underTheFlapperAs: new, of: turns.wheel.count)
+    }
+}

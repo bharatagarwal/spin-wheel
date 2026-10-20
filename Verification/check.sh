@@ -15,8 +15,32 @@ INVARIANTS=(PickedFromTeam PickedOnce BannerOnWheel WheelFrozenWhileSpinning NoD
 LIVENESS=(SpinsEnd)
 ALL=($INVARIANTS $LIVENESS)
 KNOWN_FINDINGS=()
-props=(${@:-$ALL})
 out=${HERE:h}/.verify/tla; mkdir -p $out
+
+if [[ $1 == traces ]]; then
+    work=$out/traces; rm -r -f $work $out/traces.log; mkdir -p $work
+    (cd ${HERE:h} && ./property-test.sh --filter theRealStandupLeavesTracesForTLC > $out/traces-swift.log 2>&1) ||
+        { print "FAIL   traces: the Swift run failed; see $out/traces-swift.log"; exit 1 }
+    cp $SPEC_DIR/TurnOrder.tla $HERE/TraceCheck.tla ${HERE:h}/.verify/traces/Traces.tla $work/
+    cat > $work/TraceCheck.cfg <<CFG
+CONSTANTS
+    Names <- TraceNames
+    InitialTeam <- TraceTeam
+    None = None
+INIT TraceInit
+NEXT TraceNext
+INVARIANT StartsAtInit $INVARIANTS
+CFG
+    if (cd $work && java -XX:+UseParallelGC -cp $JAR tlc2.TLC -workers auto -metadir states TraceCheck.tla > $out/traces.log 2>&1); then
+        print "pass   traces  $(grep -o '[0-9,]* distinct states found' $out/traces.log | head -1)"
+        exit 0
+    fi
+    rejected=$(grep -o '^/\\ \(trace\|step\) = [0-9]*' $out/traces.log | tail -2 | tr -d '/\\' | paste -sd, -)
+    print "FAIL   traces: the code took a step the model does not allow, after${rejected:- the first state}; see $out/traces.log"
+    exit 1
+fi
+
+props=(${@:-$ALL})
 rc=0
 for p in $props; do
     work=$out/$p; rm -r -f $work; mkdir -p $work

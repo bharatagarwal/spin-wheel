@@ -1,6 +1,6 @@
 ---
 name: verify-turn-order
-description: Model-check who Hot Potato calls on - the round phase, turn order and spin motion in Turns.swift and Session.swift (Team, TurnOrder, SpinSession, Model) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
+description: Model-check who Hot Potato calls on - the round phase, turn order and spin motion in Turns.swift and Session.swift (Team, TurnOrder, Standup, SpinSession, Model) plus WheelSim's stop rules - with TLA+/TLC over every order of spins, drags, releases, adds, removes and resets. Use whenever a change touches those types or WheelSim.Phase/settle(), or when asked whether someone can be picked twice, picked after removal, or picked while holding the wheel.
 ---
 
 # Verify turn order
@@ -21,6 +21,12 @@ Each property: the promise, then what the user would see if it broke.
 | `NotPickedWhileHeld` | A spin is decided only after the user lets go. | Holding the wheel chooses the winner. |
 | `SpinsEnd` (liveness) | Every spin that starts ends with a winner, as long as the user eventually lets go of the wheel (`UserLetsGo`) and a coasting wheel eventually comes to rest (`WheelComesToRest`, backed by friction and the 30 s cap). | The wheel never stops, or stays locked in a spin. |
 
+## Does the model describe the code?
+
+The model is checked against the real code, not just written to match it. `Verification/check.sh traces` runs the property tests' `theRealStandupLeavesTracesForTLC`, which drives `Standup` (the decisions `Model` makes, without SwiftUI or the display link) through 300 seeded runs of 40 random steps and writes each run's states to `.verify/traces/Traces.tla`. TLC then checks, in `TraceCheck.tla`, that each step is one `Next` allows, and that every state keeps the properties above. A step the model doesn't allow shows up as `Deadlock reached` at that trace and step. `mutants.py` breaks `Standup` four ways and expects each one to be caught, by TLC or by a contract in `TurnOrder`.
+
+The traces stand in for `SpinSession` with `StopsWhereTold`, which ends a spin on whichever slice it is told to. So they check the decisions about who is called on, not how the wheel moves.
+
 `SpinsEnd` is checked under `FairSpec`, which adds those two fairness assumptions to `Spec`. The model does not promise that everyone eventually gets a turn: nobody has to press Spin, and Add, Remove and Reset can restart a round forever. TLC finds such a behaviour for that property even under `FairSpec`.
 
 ## Findings
@@ -34,58 +40,60 @@ Each property: the promise, then what the user would see if it broke.
 Check whether your change touches the covered code since the sync commit:
 
 ```sh
-git diff c31f73f -- Turns.swift Session.swift main.swift Physics.swift
+git diff c31f73f -- Turns.swift Session.swift Physics.swift
 ```
 
 Covered code. If your diff touches any of it, run the check, and re-read the matching model action:
 
 | Code | Model action in `TurnOrder.tla` |
 |---|---|
-| `Model.spin()`, `Model.begin()`, `TurnOrder.beginSpin()`, `TurnOrder.waiting` | `Spin`, `Begin`, `Waiting` |
-| `Model.drag(to:at:)` (idle branch), `SpinSession.grab(at:)` | `Grab` |
+| `Model.spin()`, `Standup.begin(_:)`, `TurnOrder.beginSpin()`, `TurnOrder.waiting` | `Spin`, `Begin`, `Waiting` |
+| `Model.drag(to:at:)` when no spin is running, `SpinSession.grab(at:)` | `Grab` |
 | `Model.release()`, `SpinSession.release(using:)` | `Release` |
-| `SpinSession.frame(_:)` stop branch, `Model.finish(_:)`, `TurnOrder.markDone(_:)` | `Stop`, `Finish` |
+| `SpinSession.frame(_:)` stop branch, `Standup.finish(atSlice:)`, `TurnOrder.markDone(_:)` | `Stop`, `Finish` |
 | `WheelSim.Phase`, `WheelSim.settle()` (settling and the 30 s cap from `releasedAt`), `WheelSim.stepWheel` `.held` case, `WheelSim.drive(_:)` | `Stop` is enabled only while `motion = "coasting"`: a held wheel never stops |
-| `Model.add()`, `Team.add(_:)`, `TurnOrder.add(_:)`, `TurnOrder.addForNextSpin(_:)` | `Add` |
-| `Model.remove(_:)`, `Team.remove(_:)`, `TurnOrder.remove(_:)` | `Remove` |
-| `Model.reset()`, `TurnOrder.init(shuffling:)`, `ContentView.onAppear` | `Reset`, `Init` |
-| `Model.Phase`, `Model.winner`, `SpinSession.Motion` | variables `phase`, `winner`, `motion` |
+| `Standup.add(_:)`, `Team.add(_:)`, `TurnOrder.add(_:)`, `TurnOrder.addForNextSpin(_:)` | `Add` |
+| `Standup.remove(_:)`, `Team.remove(_:)`, `TurnOrder.remove(_:)` | `Remove` |
+| `Standup.init(team:)`, `Standup.reset()`, `TurnOrder.init(shuffling:)` | `Init`, `Reset` |
+| `Standup.Phase`, `Standup.winner`, `SpinSession.Motion` | variables `phase`, `winner`, `motion` |
 
 Variables:
 
 | Variable | Swift |
 |---|---|
 | `team` | `Team.names` |
-| `order` | `TurnOrder.order` (Reset keeps team order instead of shuffling) |
+| `order` | `TurnOrder.order`, any order of the team after `Init` or `Reset` |
 | `done` | `TurnOrder.done` |
 | `wheel` | `TurnOrder.wheel`, the slices drawn |
-| `phase` | `Model.phase`: `"idle"` or `"spinning"` |
-| `winner` | the name in `Model.Phase.idle(winner:)`, or `None` |
+| `phase` | `Standup.phase`: `"idle"` or `"spinning"` |
+| `winner` | the name in `Standup.Phase.idle(winner:)`, or `None` |
 | `slices` | `SpinSession.slices` of the running session, `<<>>` when idle |
-| `motion` | `SpinSession.motion`: `"held"`, `"coasting"`, or `"none"` when there is no session (`.finished` is never observed because `Model.finish(_:)` drops the session in the same frame) |
+| `motion` | `SpinSession.motion`: `"held"`, `"coasting"`, or `"none"` when there is no session (`.finished` is never observed because `Model.finish(_:)` ends the spin in the same frame) |
 | `pickRecordForProperties` | nothing in Swift: what the last `Finish` picked and in what state, so the properties can inspect it |
 
-Each action is one Model method or one display-link frame. They are atomic because SwiftUI actions and the `CADisplayLink` callback run one at a time on the main thread.
+Each action is one `Standup` method or one display-link frame. They are atomic because SwiftUI actions and the `CADisplayLink` callback run one at a time on the main thread.
 
 Physics changes that only move *where* the wheel stops (forces, friction, geometry) are not covered here; use `./test.sh` (see the `verify-hotpotato` skill's `features/fairness-test.md`).
 
 ## Run it
 
-From the repo root. `./check.sh` runs these along with every other check in the repo (build, lint, complexity, unit tests, property-based tests, physics statistics); `./check.sh quick` skips the statistics.
+From the repo root. `./check.sh` runs these, and the trace check, along with every other check in the repo (build, lint, complexity, unit tests, property-based tests, physics statistics); `./check.sh quick` skips the statistics.
 
 ```sh
 Verification/check.sh                 # all properties, about 5 s
 Verification/check.sh PickedOnce      # one property
-python3 -I Verification/mutants.py    # proves each passing property can still fail, about 5 s
+Verification/check.sh traces          # the real Standup's steps, against the model, about 10 s
+python3 -I Verification/mutants.py    # proves each check can still fail, about 30 s
 ```
 
 The first run downloads TLC v1.7.4 (`tla2tools.jar`, SHA-256 pinned in `check.sh`) into `.verify/tools/`. It needs Java 11 or later; `java -version` should work. Logs and traces go to `.verify/tla/<Property>.log` (gitignored).
 
 Output lines:
 
-- `pass   P  N distinct states found`: holds in all N reachable states (currently 10,149).
+- `pass   P  N distinct states found`: holds in all N reachable states (currently 86,001).
 - `FAIL   P` plus `trace: …log`: violated; read the trace (below). Exit code 1.
 - `known  P (still fails, as recorded)`: a finding listed in `KNOWN_FINDINGS` (none at the moment).
+- `pass   traces` or `FAIL   traces: … after step = s, trace = t`: whether every traced step of the real `Standup` is one the model allows. On a failure, state `s + 1` of trace `t` in `.verify/traces/Traces.tla` is the one TLC rejected.
 - `FIXED? P now passes`: a known finding stopped failing; confirm the fix and update `KNOWN_FINDINGS` and Findings. Exit code 1.
 - `TLC did not finish cleanly`: a parse or config error, not a verdict. Exit code 2.
 
@@ -96,13 +104,13 @@ Output lines:
 In the log, each `State n: <Action …>` is one step, and the table above maps it to code. Retell it as steps in the app ("Ben is removed, the user grabs the wheel, the spin times out while held, Ben is called on"). Then decide which kind of failure it is:
 
 - **Real bug.** Every step is something the code allows: find the guard in the Swift that should have blocked it and doesn't. Report it with the steps. Do not weaken the property or the model to make it pass, and don't change product code unless the user asks.
-- **Modeling error.** A step is something the code cannot do, for example the model lets `Remove` run while spinning but `Model.remove(_:)` guards on `.idle`. Fix the action in `TurnOrder.tla` to match the code, then rerun `check.sh` and `mutants.py`.
+- **Modeling error.** A step is something the code cannot do, for example the model lets `Remove` run while spinning but `Standup.remove(_:)` guards on `.idle`. Fix the action in `TurnOrder.tla` to match the code, then rerun `check.sh` and `mutants.py`.
 
 ## Updating the model for an intended change
 
-1. Change the matching action so it does exactly what the new Swift does. One Model method or one display-link frame is one action. All of them run on the main thread, which is why each is atomic.
+1. Change the matching action so it does exactly what the new Swift does. One `Standup` method or one display-link frame is one action. All of them run on the main thread, which is why each is atomic.
 2. If the change adds state the properties depend on, add a variable and a row for it in the Variables table above.
-3. Run `Verification/check.sh` and `python3 -I Verification/mutants.py`. Add a mutant for any new property.
+3. Run `Verification/check.sh`, `Verification/check.sh traces` and `python3 -I Verification/mutants.py`. If the change adds a `Standup` method, add a matching `Step` in `Tests/Properties/Traces.swift`. Add a mutant for any new property.
 4. Update the code-to-action table and, once you've confirmed that the model matches the code at your commit, move the sync commit below forward.
 
 ## Scope and assumptions
@@ -110,7 +118,6 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 - **Bounds:** names come from {Ana, Ben, Cy, Dee}, and the team starts as Ana, Ben, Cy (`MC.tla`). Each name can be added and removed any number of times. Bugs that need five or more distinct names are out of reach. Nothing in the code depends on team size, so that is unlikely to matter.
 - **Not modelled:**
   - Where the wheel lands. `Finish` may pick any slice. Fairness is `./test.sh`'s job.
-  - Shuffling. `Reset` keeps team order, and no property depends on order.
   - Persistence. `Team.load()` and `save()` are not modelled.
   - Sound and the accessibility layer.
   - UI-level `.disabled` modifiers. The model gives only the Model's own guards credit, so anything reachable through AX or the keyboard is covered.
@@ -119,5 +126,5 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 
 ## Coverage record
 
-- Files: `Turns.swift` (`Team`, `TurnOrder`), `Session.swift` (`SpinSession`, `Model`), `main.swift` (`ContentView.onAppear`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
+- Files: `Turns.swift` (`Team`, `TurnOrder`, `Standup`), `Session.swift` (`SpinSession`, `Model`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
 - **Sync commit: `c31f73f`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
