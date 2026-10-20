@@ -41,8 +41,7 @@ struct Standup {
     }
 
     mutating func add(_ typed: String, spinning: Bool) {
-        let name = typed.trimmingCharacters(in: .whitespaces)
-        guard team.add(name) else { return }
+        guard let name = team.add(typed) else { return }
         if spinning { turns.addForNextSpin(name) } else { turns.add(name) }
     }
 

@@ -213,8 +213,7 @@ final class Model: ObservableObject {
     }
 
     func add() {
-        let name = newName.trimmingCharacters(in: .whitespaces)
-        guard team.add(name) else { return }
+        guard let name = team.add(newName) else { return }
         switch phase {
         case .idle: turns.add(name)
         case .spinning: turns.addForNextSpin(name)

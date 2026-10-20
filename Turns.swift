@@ -10,8 +10,8 @@ struct Team {
             ?? previous.lazy.compactMap { $0.string(forKey: "names") }.first
             ?? "Alice\nBob\nCharlie\nDana"
         var team = Team(names: [])
-        for name in saved.split(separator: "\n") {
-            _ = team.add(name.trimmingCharacters(in: .whitespaces))
+        for name in saved.split(whereSeparator: \.isNewline) {
+            _ = team.add(String(name))
         }
         team.save(to: defaults)
         return team
@@ -21,10 +21,17 @@ struct Team {
         defaults.set(names.joined(separator: "\n"), forKey: "names")
     }
 
-    mutating func add(_ name: String) -> Bool {
-        guard !name.isEmpty, !names.contains(name) else { return false }
+    static func cleaned(_ typed: String) -> String {
+        typed.filter { !$0.unicodeScalars.allSatisfy(\.properties.isDefaultIgnorableCodePoint) }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    mutating func add(_ typed: String) -> String? {
+        let name = Self.cleaned(typed)
+        guard !name.isEmpty, !names.contains(name) else { return nil }
         names.append(name)
-        return true
+        return name
     }
 
     mutating func remove(_ name: String) {

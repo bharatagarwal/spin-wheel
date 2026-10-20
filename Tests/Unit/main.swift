@@ -28,11 +28,12 @@ do {
 
 do {
     var team = Team.load(from: scratchDefaults("Ana"), orFrom: [])
-    expect(!team.add("Ana"), "add rejects a duplicate")
-    expect(!team.add(""), "add rejects a blank name")
-    expect(team.add("Ben") && team.names == ["Ana", "Ben"], "add appends a new name")
+    expect(team.add("Ana") == nil, "add rejects a duplicate")
+    expect(team.add(" \u{200B}\n") == nil, "add rejects a name with nothing visible in it")
+    expect(team.add(" Ben\r\n Cy ") == "Ben Cy" && team.names == ["Ana", "Ben Cy"], "add keeps a typed name on one line")
+    expect(team.add("👩\u{200D}💻") == "👩\u{200D}💻", "add keeps the joiners inside an emoji")
     team.remove("Ana")
-    expect(team.names == ["Ben"], "remove drops the name")
+    expect(team.names == ["Ben Cy", "👩\u{200D}💻"], "remove drops the name")
 }
 
 do {
