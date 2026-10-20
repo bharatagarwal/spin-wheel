@@ -4,16 +4,18 @@ let palette: [NSColor] = [
     .systemRed, .systemOrange, .systemYellow, .systemGreen, .systemTeal, .systemBlue, .systemIndigo, .systemPurple,
 ]
 
+let appleIconGrid: CGFloat = 1024
+let appleIconTileInset: CGFloat = 100
+
 func render(_ px: Int) -> NSBitmapImageRep {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8, samplesPerPixel: 4,
                                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let ctx = NSGraphicsContext.current!.cgContext
-    // Draw on Apple's 1024 grid: an 824 pt tile inset by 100, y pointing up.
-    ctx.scaleBy(x: CGFloat(px) / 1024, y: CGFloat(px) / 1024)
+    ctx.scaleBy(x: CGFloat(px) / appleIconGrid, y: CGFloat(px) / appleIconGrid)
 
-    let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
+    let tile = CGRect(x: 0, y: 0, width: appleIconGrid, height: appleIconGrid).insetBy(dx: appleIconTileInset, dy: appleIconTileInset)
     let tilePath = CGPath(roundedRect: tile, cornerWidth: 185, cornerHeight: 185, transform: nil)
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -12), blur: 28, color: NSColor.black.withAlphaComponent(0.45).cgColor)

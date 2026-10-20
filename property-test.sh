@@ -1,5 +1,4 @@
 #!/bin/zsh
-# Property-based tests with PropertyBased (x-sheep/swift-property-based), built with plain swiftc. Arguments go to Swift Testing, e.g. --filter NameProperties.
 set -e
 cd "$(dirname "$0")"
 PB_VERSION=2.0.1

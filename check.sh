@@ -1,5 +1,4 @@
 #!/bin/zsh
-# Every check in the repo: ./check.sh, or ./check.sh quick to skip the slow physics statistics.
 cd "$(dirname "$0")"
 SC_VERSION=1.6.0
 SC_SHA256=a54d2731acacbe912bb42f61b81836fe3c18dbbed12469fb812436a0d3f10ffb
