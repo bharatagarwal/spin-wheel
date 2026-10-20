@@ -40,7 +40,7 @@ The traces stand in for `SpinSession` with `StopsWhereTold`, which ends a spin o
 Check whether your change touches the covered code since the sync commit:
 
 ```sh
-git diff a9dbbe8 -- Turns.swift Session.swift Physics.swift
+git diff f5bea37 -- Turns.swift Session.swift Physics.swift
 ```
 
 Covered code. If your diff touches any of it, run the check, and re-read the matching model action:
@@ -127,4 +127,4 @@ In the log, each `State n: <Action …>` is one step, and the table above maps i
 ## Coverage record
 
 - Files: `Turns.swift` (`Team`, `TurnOrder`, `Standup`), `Session.swift` (`SpinSession`, `Model`) and `Physics.swift` (`WheelSim.Phase`, `push`, `drive`, `settle` with its 30 s cap from `releasedAt`, and the `.held` case of `stepWheel`).
-- **Sync commit: `a9dbbe8`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
+- **Sync commit: `f5bea37`.** The model was last confirmed to describe the covered code at this commit. Move it forward only after re-reading the covered code at the new commit against the table above and running both commands.
