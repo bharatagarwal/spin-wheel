@@ -144,3 +144,28 @@ struct Drag: Sendable, CustomStringConvertible {
         #expect(watch.widestSwing < .pi / 2, "swing \(watch.widestSwing)")
     }
 }
+
+func sliceBetweenPegs(around point: YDownPoint, of slices: Int, wheelAngle: Double) -> Int {
+    let segment = 2 * Double.pi / Double(slices)
+    let inWheelFrame = atan2(point.y, point.x) - wheelAngle
+    return (0..<slices).first { i in
+        let fromPeg = remainder(inWheelFrame - Double(i) * segment, 2 * .pi)
+        return fromPeg >= 0 && fromPeg < segment
+    } ?? slices - 1
+}
+
+@Test func aFlapperRestingOnAPegGoesToTheSliceItLeansFrom() async {
+    await propertyCheck(count: 300, input: teamSize, startAngle, flick, Gen.uint64()) { slices, start, measured, seed in
+        var sim = WheelSim(slices: slices, clockwiseAngle: start)
+        sim.push(push(flicked: measured, seed: seed))
+        var watch = Watch()
+        coastToRest(&sim, watch: &watch)
+        let flapper = WheelRadii.flapper(rootFromVertical: sim.rootFromVertical, tipFromVertical: sim.tipFromVertical)
+        let segment = 2 * Double.pi / Double(slices)
+        let tipFromPeg = remainder(atan2(flapper.tip.y, flapper.tip.x) - sim.clockwiseAngle, segment)
+        let restsOnAPeg = abs(tipFromPeg) < WheelRadii.pegRadius / WheelRadii.pegCircle
+        let pointer = restsOnAPeg ? WheelRadii.armOverThePegTop(flapper) : flapper.tip
+        let expected = sliceBetweenPegs(around: pointer, of: slices, wheelAngle: sim.clockwiseAngle)
+        #expect(sim.winner == expected, "resting on a peg: \(restsOnAPeg); winner \(sim.winner), the arm is in \(expected)")
+    }
+}

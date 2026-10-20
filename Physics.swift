@@ -33,6 +33,18 @@ enum WheelRadii {
         return a / (2 * .pi / Double(slices))
     }
 
+    static func slice(under flapper: FlapperPoints, wheelAngle: Double, slices: Int) -> Int {
+        let tip = slicesFromFirst(to: flapper.tip, wheelAngle: wheelAngle, slices: slices)
+        let tipRestsOnAPeg = abs(tip - tip.rounded()) * 2 * .pi / Double(slices) < pegRadius / pegCircle
+        let shown = tipRestsOnAPeg ? slicesFromFirst(to: armOverThePegTop(flapper), wheelAngle: wheelAngle, slices: slices) : tip
+        return min(Int(shown), slices - 1)
+    }
+
+    static func armOverThePegTop(_ flapper: FlapperPoints) -> YDownPoint {
+        let back = (pegRadius + armRadius) / segmentLength
+        return (x: flapper.tip.x + (flapper.joint.x - flapper.tip.x) * back, y: flapper.tip.y + (flapper.joint.y - flapper.tip.y) * back)
+    }
+
     static func peg(_ i: Int, of slices: Int, wheelAngle: Double = 0) -> YDownPoint {
         let angle = wheelAngle + sliceAngle(i, of: slices)
         return (x: pegCircle * cos(angle), y: pegCircle * sin(angle))
@@ -146,7 +158,7 @@ struct WheelSim {
     }
 
     var winner: Int {
-        min(Int(WheelRadii.slicesFromFirst(to: points.tip, wheelAngle: clockwiseAngle, slices: slices)), slices - 1)
+        WheelRadii.slice(under: points, wheelAngle: clockwiseAngle, slices: slices)
     }
 
     private var points: FlapperPoints {
