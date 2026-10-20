@@ -11,6 +11,8 @@ CLT=/Library/Developer/CommandLineTools
 FRAMEWORKS=$CLT/Library/Developer/Frameworks
 TESTING_PLUGINS=$CLT/usr/lib/swift/host/plugins/testing
 TARGET=arm64-apple-macos26.0
+[[ $(swiftc -print-target-info) == *\"runtimeResourcePath\":\ \"$CLT/usr/lib/swift\"* ]] ||
+    { print "swiftc is not the Command Line Tools compiler; run: sudo xcode-select -s $CLT"; exit 2 }
 
 if [[ ! -d $PB_DIR/src ]]; then
     mkdir -p $PB_DIR
