@@ -27,6 +27,7 @@ step build ./build.sh
 step lint swiftlint lint --strict --quiet
 step complexity $SC $SOURCES --threshold $COMPLEXITY_LIMIT
 step unit ./unit-test.sh
+step properties ./property-test.sh
 [[ $1 == quick ]] || step fairness ./test.sh 1000
 step model Verification/check.sh
 step mutants python3 -I Verification/mutants.py
